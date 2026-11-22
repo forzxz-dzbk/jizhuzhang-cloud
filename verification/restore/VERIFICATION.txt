@@ -76,3 +76,13 @@ MODIFIED stdout: OPENING_BALANCE_SAVED=true | ACCOUNT_BALANCE_COMPONENT=true | C
 ROLLBACK stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | CENTS_BALANCE_MODULE=false; stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
 ROLLBACK_HASH_MATCHES_BASELINE=True
 Unit tests: 16/16 PASS. PGlite migration/financial invariants PASS. Production build PASS. pnpm audit --prod: no known vulnerabilities.
+
+Corrected account-balance behavior matcher. Previous check looked for the calculator import in LedgerHome; the calculator is imported by AccountBalances.tsx, so that particular field was invalid and is superseded.
+Command: node -e <opening-balance/component wiring check> <LedgerHome role file>.
+BASELINE stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | BALANCE_COMPONENT_IMPORTED=false
+BASELINE stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
+MODIFIED stdout: OPENING_BALANCE_SAVED=true | ACCOUNT_BALANCE_COMPONENT=true | BALANCE_COMPONENT_IMPORTED=false
+MODIFIED stderr: (empty); exit: 0; SHA256: 00CB827949B9C0DE52790552973E68B8593D3A7B387F4C1DFD257473107B905E
+ROLLBACK stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | BALANCE_COMPONENT_IMPORTED=false
+ROLLBACK stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
+ROLLBACK_HASH_MATCHES_BASELINE=True
