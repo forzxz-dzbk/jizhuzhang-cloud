@@ -1,0 +1,6 @@
+Baseline state: .github/workflows/ci.yml absent; checker stdout WORKFLOW_PRESENT=false; exit 0
+Modified state: workflow present; structural checker verified triggers, read-only permissions, tests, DB migration checks, build, audit, and no injected VITE secrets; exit 0; SHA256=6E9CA8AE4C926081984524292A70F0D5B3727C93625EE333CD38F52DBB512495
+Patch reconstruction: git apply --check + git apply succeeded in isolated temp tree; normalized text exact match; modified SHA256=6E9CA8AE4C926081984524292A70F0D5B3727C93625EE333CD38F52DBB512495
+Rollback: prior attempt depended on unavailable rm (exit 127); corrected rollback uses Node fs.unlinkSync; sh syntax exit 0; script exit 0; same checker after rollback outputs WORKFLOW_PRESENT=false; checker exit 0.
+Latest project gates: pnpm test 20/20; pnpm test:db PASS; pnpm build PASS; pnpm audit --prod PASS (No known vulnerabilities).
+Target: F:\AI\《记祝账》云端记账项目开发\06-云端候选\.github\workflows\ci.yml
