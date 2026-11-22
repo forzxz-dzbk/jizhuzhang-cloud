@@ -7,6 +7,7 @@ import { LedgerOverview } from './LedgerOverview';
 import { CloudBackup } from './CloudBackup';
 import { escapeLikePattern } from './transaction-search.mjs';
 import { AccountBalances } from './AccountBalances';
+import { BusinessOrderStatistics } from './BusinessOrderStatistics';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = { id: string; type: string; amount: number; occurred_on: string; note: string };
@@ -153,16 +154,33 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if (!Number.isFinite(amount) || amount <= 0) { setError('金额必须大于 0。'); return; }
     if (entryType === 'transfer' && accountId === transferAccountId) { setError('转出与转入账户不能相同。'); return; }
     setBusy(true); setError(''); setNotice('');
-    const args: Record<string, unknown> = {
+    const note = String(form.get('note') ?? '');
+    let rpcName = 'create_transaction';
+    let args: Record<string, unknown>;
+    if (active.kind === 'business' && entryType === 'income') {
+      rpcName = 'create_business_income';
+      args = {
+        p_request_id: requestId, p_ledger_id: selected, p_account_id: accountId,
+        p_amount: amount, p_occurred_on: date, p_note: note, p_category_id: categoryId,
+        p_business_order_date: String(form.get('orderDate')),
+        p_business_order_title: String(form.get('orderTitle')),
+        p_business_type: String(form.get('businessType') ?? '').trim(),
+      };
+    } else if (active.kind === 'business' && entryType === 'expense') {
+      rpcName = 'create_business_cost';
+      args = {
+        p_request_id: requestId, p_ledger_id: selected, p_account_id: accountId,
+        p_amount: amount, p_occurred_on: date, p_note: note, p_category_id: categoryId,
+        p_cost_order_id: String(form.get('costOrder') ?? '') || null,
+      };
+    } else args = {
       p_request_id: requestId, p_ledger_id: selected, p_type: entryType,
       p_account_id: accountId, p_amount: amount, p_occurred_on: date,
-      p_note: String(form.get('note') ?? ''), p_category_id: categoryId,
-      p_transfer_account_id: transferAccountId,
-      p_business_order_date: active.kind === 'business' && entryType === 'income' ? String(form.get('orderDate')) : null,
-      p_business_order_title: active.kind === 'business' && entryType === 'income' ? String(form.get('orderTitle')) : null,
+      p_note: note, p_category_id: categoryId, p_transfer_account_id: transferAccountId,
+      p_business_order_date: null, p_business_order_title: null,
       p_refund_order_id: active.kind === 'business' && entryType === 'refund' ? String(form.get('refundOrder')) : null,
     };
-    const { error: saveError } = await supabase.rpc('create_transaction', args);
+    const { error: saveError } = await supabase.rpc(rpcName, args);
     if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
     else {
       setNotice('流水已保存到云端。');
@@ -189,6 +207,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       <nav className="ledger-tabs" aria-label="选择账本">{ledgers.map(row => <button key={row.id} className={selected === row.id ? 'selected' : 'secondary'} onClick={() => setSelected(row.id)}>{row.name}</button>)}</nav>
       {active?.kind === 'business' && <RevenueCalendar ledgerId={active.id} />}
       {active&&<LedgerOverview ledgerId={active.id}/>}
+      {active?.kind === 'business' && <BusinessOrderStatistics ledgerId={active.id} />}
       {active && <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{
         setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
         await loadTransactions(0,'');
@@ -207,8 +226,9 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
           <label>账户<select name="account" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
           {(entryType === 'income'||entryType==='expense') && <label>分类<select name="category" required>{categories.filter(c=>c.flow===entryType).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
           {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
+          {active.kind==='business'&&entryType==='expense'&&<label>关联业务订单（可选）<select name="costOrder"><option value="">不关联订单</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
           {entryType === 'transfer' && <label>转入账户<select name="transferAccount" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
+          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>业务类型<input name="businessType" required maxLength={80} placeholder="例如：自媒体、技术服务"/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
           <label>备注<input name="note" maxLength={500}/></label>
           <button disabled={busy || accounts.length===0 || ((entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType)) || (entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存流水'}</button>
           {accounts.length===0 && <p className="error">请先创建账户。</p>}

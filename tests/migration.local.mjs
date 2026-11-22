@@ -16,6 +16,8 @@ try {
     grant execute on function auth.uid() to authenticated;`);
   const migration = await readFile(new URL('../supabase/migrations/0001_cloud_foundation.sql', import.meta.url), 'utf8');
   await db.exec(migration.replace('create extension if not exists pgcrypto;', ''));
+  const businessMigration = await readFile(new URL('../supabase/migrations/0002_business_order_costs_and_types.sql', import.meta.url), 'utf8');
+  await db.exec(businessMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -70,6 +72,33 @@ try {
   await db.exec(`${confirm}; ${confirm};`);
   const actual=(await db.query(`select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-02-28'`)).rows[0];
   assert.equal(Number(actual.expense),105,'only confirmed actual amount is counted once');
+
+  const orderIncomeRequest='99999999-9999-4999-8999-999999999991';
+  const orderIncome=`select public.create_business_income('${orderIncomeRequest}','${business}','${account}',400,'2026-11-20','','${category}','2026-11-20','代运营项目','内容服务')`;
+  await db.exec(`${orderIncome}; ${orderIncome};`);
+  const trackedOrder=(await db.query(`select id from public.business_orders where title='代运营项目'`)).rows[0].id;
+  const costRequest='99999999-9999-4999-8999-999999999992';
+  const cost=`select public.create_business_cost('${costRequest}','${business}','${account}',150,'2026-11-20','外包成本','${expenseCategory}','${trackedOrder}')`;
+  await db.exec(`${cost}; ${cost};`);
+  let mismatchedCostRetryRejected=false;
+  try { await db.exec(`select public.create_business_cost('${costRequest}','${business}','${account}',151,'2026-11-20','外包成本','${expenseCategory}','${trackedOrder}')`); }
+  catch { mismatchedCostRetryRejected=true; }
+  assert.ok(mismatchedCostRetryRejected,'business cost retry with changed amount cannot overwrite the original request');
+  const refundTracked=`select public.create_transaction('99999999-9999-4999-8999-999999999993','${business}','refund','${account}',100,'2026-11-21','',null,null,null,null,'${trackedOrder}')`;
+  await db.exec(refundTracked);
+  const orderStats=(await db.query(`select business_type,gross_revenue,refunds,actual_revenue,allocated_cost,operating_surplus from public.business_order_totals where id='${trackedOrder}'`)).rows[0];
+  assert.equal(orderStats.business_type,'内容服务','each order retains its business type');
+  assert.equal(Number(orderStats.gross_revenue),400);
+  assert.equal(Number(orderStats.refunds),100);
+  assert.equal(Number(orderStats.actual_revenue),300);
+  assert.equal(Number(orderStats.allocated_cost),150);
+  assert.equal(Number(orderStats.operating_surplus),150,'order surplus = actual receipts less refunds and allocated costs');
+  const personalLedger=(await db.query(`select id from public.ledgers where kind='personal'`)).rows[0].id;
+  let businessTypeInPersonalRejected=false;
+  try { await db.exec(`select public.create_business_income('99999999-9999-4999-8999-999999999994','${personalLedger}','${account}',10,'2026-11-20','','${category}','2026-11-20','非法订单','非法')`); }
+  catch { businessTypeInPersonalRejected=true; }
+  assert.ok(businessTypeInPersonalRejected,'business orders cannot enter personal ledgers');
+
   await db.exec('reset role');
   await db.exec(`select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
   const recoveryLedger=(await db.query(`insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'business','恢复验证账本') returning id`)).rows[0].id;
@@ -84,5 +113,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migration/RLS; order-date revenue/refund; idempotent income; monthly pending generation; pending exclusion; confirmed expense and retry idempotency; cycle-safe confirmed-recurring restore staging.');
+  console.log('PASS migrations 0001-0002/RLS; split ledgers; order-date revenue/refund; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }

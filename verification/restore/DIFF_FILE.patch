@@ -1,57 +1,71 @@
 diff --git CloudBackup.baseline.tsx MODIFIED_FILE.tsx
-index 00e3985..9f03c14 100644
+index 9f03c14..9f24340 100644
 --- CloudBackup.baseline.tsx
 +++ MODIFIED_FILE.tsx
-@@ -6,10 +6,11 @@ import { RecurringExpenses } from './RecurringExpenses';
- import { LedgerOverview } from './LedgerOverview';
+@@ -7,6 +7,7 @@ import { LedgerOverview } from './LedgerOverview';
  import { CloudBackup } from './CloudBackup';
  import { escapeLikePattern } from './transaction-search.mjs';
-+import { AccountBalances } from './AccountBalances';
+ import { AccountBalances } from './AccountBalances';
++import { BusinessOrderStatistics } from './BusinessOrderStatistics';
  
  type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
  type Transaction = { id: string; type: string; amount: number; occurred_on: string; note: string };
--type Account = { id: string; name: string };
-+type Account = { id: string; name: string; opening_balance: number | string };
- type Category = { id: string; name: string; flow: 'income' | 'expense' };
- type BusinessOrder = { id: string; title: string; order_date: string };
- const TRANSACTION_PAGE_SIZE = 100;
-@@ -83,7 +84,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
-   const loadOptions = useCallback(async () => {
-     if (!supabase || !selected) { setAccounts([]); setCategories([]); return; }
-     const [a, c, o] = await Promise.all([
--      supabase.from('accounts').select('id,name').eq('ledger_id', selected).eq('is_archived', false).order('name'),
-+      supabase.from('accounts').select('id,name,opening_balance').eq('ledger_id', selected).eq('is_archived', false).order('name'),
-       supabase.from('categories').select('id,name,flow').eq('ledger_id', selected).eq('is_archived', false).order('name'),
-       supabase.from('business_orders').select('id,title,order_date').eq('ledger_id', selected).order('order_date',{ascending:false}),
-     ]);
-@@ -120,10 +121,16 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
- 
-   async function createAccount(event: FormEvent<HTMLFormElement>) {
-     event.preventDefault(); if (!supabase || !selected) return;
-+    const formElement = event.currentTarget;
-+    const openingBalanceText = String(new FormData(formElement).get('opening_balance') ?? '').trim();
-+    const openingBalance = Number(openingBalanceText);
-+    if (!openingBalanceText || !Number.isFinite(openingBalance) || Math.abs(openingBalance) >= 1_000_000_000_000 || Math.abs(openingBalance * 100 - Math.round(openingBalance * 100)) > 1e-8) {
-+      setError('期初余额必须是有效金额，最多两位小数。'); return;
-+    }
-     setBusy(true); setError('');
--    const { error: e } = await supabase.from('accounts').insert({ ledger_id: selected, name: accountName.trim() });
-+    const { error: e } = await supabase.from('accounts').insert({ ledger_id: selected, name: accountName.trim(), opening_balance: openingBalance });
-     if (e) setError(`账户保存失败：${e.message}`);
--    else { setAccountName(''); await loadOptions(); setNotice('账户已保存到云端。'); }
-+    else { setAccountName(''); formElement.reset(); await loadOptions(); setNotice('账户已保存到云端。'); }
-     setBusy(false);
-   }
-   async function createCategory(event: FormEvent<HTMLFormElement>, flow: Category['flow']) {
-@@ -188,9 +195,10 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
-       }} />}
-       {active && <section className="panel"><h2>{active.name} · 近期明细</h2>
-         <section className="setup-grid">
--          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><button disabled={busy}>保存账户</button></form>
-+          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><label>期初余额（CNY）<input name="opening_balance" type="number" step="0.01" required defaultValue="0"/></label><small>这是首次使用时的起点余额；负数可用于记录信用卡等负债。</small><button disabled={busy}>保存账户</button></form>
-           <form onSubmit={e=>void createCategory(e, categoryFlow)}><h3>新增分类</h3><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="例如：餐饮或工资"/><button disabled={busy}>保存分类</button></form>
-         </section>
-+        <AccountBalances ledgerId={active.id} accounts={accounts}/>
-         <form className="entry-form" onSubmit={createTransaction}>
-           <h3>新增流水</h3>
-           <label>类型<select value={entryType} onChange={e=>setEntryType(e.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>
+@@ -153,16 +154,33 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
+     if (!Number.isFinite(amount) || amount <= 0) { setError('金额必须大于 0。'); return; }
+     if (entryType === 'transfer' && accountId === transferAccountId) { setError('转出与转入账户不能相同。'); return; }
+     setBusy(true); setError(''); setNotice('');
+-    const args: Record<string, unknown> = {
++    const note = String(form.get('note') ?? '');
++    let rpcName = 'create_transaction';
++    let args: Record<string, unknown>;
++    if (active.kind === 'business' && entryType === 'income') {
++      rpcName = 'create_business_income';
++      args = {
++        p_request_id: requestId, p_ledger_id: selected, p_account_id: accountId,
++        p_amount: amount, p_occurred_on: date, p_note: note, p_category_id: categoryId,
++        p_business_order_date: String(form.get('orderDate')),
++        p_business_order_title: String(form.get('orderTitle')),
++        p_business_type: String(form.get('businessType') ?? '').trim(),
++      };
++    } else if (active.kind === 'business' && entryType === 'expense') {
++      rpcName = 'create_business_cost';
++      args = {
++        p_request_id: requestId, p_ledger_id: selected, p_account_id: accountId,
++        p_amount: amount, p_occurred_on: date, p_note: note, p_category_id: categoryId,
++        p_cost_order_id: String(form.get('costOrder') ?? '') || null,
++      };
++    } else args = {
+       p_request_id: requestId, p_ledger_id: selected, p_type: entryType,
+       p_account_id: accountId, p_amount: amount, p_occurred_on: date,
+-      p_note: String(form.get('note') ?? ''), p_category_id: categoryId,
+-      p_transfer_account_id: transferAccountId,
+-      p_business_order_date: active.kind === 'business' && entryType === 'income' ? String(form.get('orderDate')) : null,
+-      p_business_order_title: active.kind === 'business' && entryType === 'income' ? String(form.get('orderTitle')) : null,
++      p_note: note, p_category_id: categoryId, p_transfer_account_id: transferAccountId,
++      p_business_order_date: null, p_business_order_title: null,
+       p_refund_order_id: active.kind === 'business' && entryType === 'refund' ? String(form.get('refundOrder')) : null,
+     };
+-    const { error: saveError } = await supabase.rpc('create_transaction', args);
++    const { error: saveError } = await supabase.rpc(rpcName, args);
+     if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
+     else {
+       setNotice('流水已保存到云端。');
+@@ -189,6 +207,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
+       <nav className="ledger-tabs" aria-label="选择账本">{ledgers.map(row => <button key={row.id} className={selected === row.id ? 'selected' : 'secondary'} onClick={() => setSelected(row.id)}>{row.name}</button>)}</nav>
+       {active?.kind === 'business' && <RevenueCalendar ledgerId={active.id} />}
+       {active&&<LedgerOverview ledgerId={active.id}/>}
++      {active?.kind === 'business' && <BusinessOrderStatistics ledgerId={active.id} />}
+       {active && <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{
+         setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
+         await loadTransactions(0,'');
+@@ -207,8 +226,9 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
+           <label>账户<select name="account" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+           {(entryType === 'income'||entryType==='expense') && <label>分类<select name="category" required>{categories.filter(c=>c.flow===entryType).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+           {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
++          {active.kind==='business'&&entryType==='expense'&&<label>关联业务订单（可选）<select name="costOrder"><option value="">不关联订单</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
+           {entryType === 'transfer' && <label>转入账户<select name="transferAccount" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+-          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
++          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>业务类型<input name="businessType" required maxLength={80} placeholder="例如：自媒体、技术服务"/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
+           <label>备注<input name="note" maxLength={500}/></label>
+           <button disabled={busy || accounts.length===0 || ((entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType)) || (entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存流水'}</button>
+           {accounts.length===0 && <p className="error">请先创建账户。</p>}
