@@ -1,0 +1,22 @@
+Target: src/CloudBackup.tsx; goal: add guarded backup restore.
+Changed branch/function: restoreBackup(file), same-account/version guard, empty-table preflight, confirmation, dependency-ordered inserts, reverse rollback.
+Command/input for all behaviors: node -e "const fs=require('fs');const s=fs.readFileSync(process.argv[1],'utf8'); console.log('RESTORE_AVAILABLE='+s.includes('async function restoreBackup'));console.log('EMPTY_ACCOUNT_GUARD='+s.includes('data?.length'));console.log('CONFIRM_BEFORE_WRITE='+s.includes('window.confirm'));console.log('EXPORT_AVAILABLE='+s.includes('下载完整云端备份'));" <role file path>
+
+BASELINE stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true
+BASELINE stderr: (empty)
+BASELINE exit status: 0
+BASELINE SHA256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
+
+MODIFIED stdout: RESTORE_AVAILABLE=true | EMPTY_ACCOUNT_GUARD=true | CONFIRM_BEFORE_WRITE=true | EXPORT_AVAILABLE=true
+MODIFIED stderr: (empty)
+MODIFIED exit status: 0
+MODIFIED SHA256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+
+ROLLBACK stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true
+ROLLBACK stderr: (empty)
+ROLLBACK exit status: 0
+ROLLBACK SHA256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
+
+Rollback command: sh ROLLBACK.sh <separate copy of MODIFIED_FILE>
+Rollback status: exit 0; restored hash equals baseline SHA256 F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F.
+Build/test evidence: pnpm test (11/11 pass); pnpm test:db (PASS); pnpm build (PASS); pnpm audit --prod (No known vulnerabilities).

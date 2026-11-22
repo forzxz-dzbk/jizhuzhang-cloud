@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+const db = new PGlite();
+const userA = '11111111-1111-4111-8111-111111111111';
+const userB = '22222222-2222-4222-8222-222222222222';
+try {
+  await db.exec(`create schema auth;
+    create table auth.users (id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+    $$;
+    create role anon;
+    create role authenticated;
+    grant usage on schema auth to authenticated;
+    grant execute on function auth.uid() to authenticated;`);
+  const migration = await readFile(new URL('../supabase/migrations/0001_cloud_foundation.sql', import.meta.url), 'utf8');
+  await db.exec(migration.replace('create extension if not exists pgcrypto;', ''));
+  await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
+  await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
+    insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
+  const aCount = await db.query('select count(*)::int as n from public.ledgers');
+  assert.equal(aCount.rows[0].n, 1, 'user A can see own ledger');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
+  const bCount = await db.query('select count(*)::int as n from public.ledgers');
+  assert.equal(bCount.rows[0].n, 0, 'user B cannot see user A ledger');
+  let denied = false;
+  try { await db.exec(`insert into public.ledgers(owner_id,kind,name) values ('${userA}','business','越权');`); }
+  catch { denied = true; }
+  assert.ok(denied, 'RLS rejects cross-account write');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
+    insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'business','业务') returning id;`);
+  const business = (await db.query("select id from public.ledgers where kind='business'")).rows[0].id;
+  const account = (await db.query(`insert into public.accounts(ledger_id,name) values ('${business}','收款账户') returning id`)).rows[0].id;
+  const category = (await db.query(`insert into public.categories(ledger_id,name,flow) values ('${business}','服务收入','income') returning id`)).rows[0].id;
+  const requestId = '33333333-3333-4333-8333-333333333333';
+  const request = `select public.create_transaction('${requestId}','${business}','income','${account}',500,'2026-11-18','', '${category}',null,'2026-11-17','订单')`;
+  await db.exec(`${request}; ${request};`);
+  const orderCount = await db.query("select count(*)::int as n from public.business_orders where title='订单'");
+  assert.equal(orderCount.rows[0].n, 1, 'retry uses same idempotency key and does not duplicate order');
+  const target = await db.query(`select revenue,goal_reached from public.business_daily_revenue where ledger_id='${business}'`);
+  assert.equal(Number(target.rows[0].revenue), 500);
+  assert.equal(target.rows[0].goal_reached, true, 'order-date goal at 500 is achieved');
+  const orderId = (await db.query("select id from public.business_orders where title='订单'")).rows[0].id;
+  const refundId='55555555-5555-4555-8555-555555555555';
+  const refundRequest=`select public.create_transaction('${refundId}','${business}','refund','${account}',100,'2026-11-19','',null,null,null,null,'${orderId}')`;
+  await db.exec(`${refundRequest}; ${refundRequest};`);
+  let refundTooLarge=false;
+  try{await db.exec(`select public.create_transaction('66666666-6666-4666-8666-666666666666','${business}','refund','${account}',401,'2026-11-20','',null,null,null,null,'${orderId}')`)}catch{refundTooLarge=true;}
+  assert.ok(refundTooLarge,'refund cannot exceed original received amount');
+  const refundDay = await db.query(`select revenue,has_revenue_record from public.business_daily_revenue where ledger_id='${business}' and order_date='2026-11-19'`);
+  assert.equal(Number(refundDay.rows[0].revenue), -100, 'refund reduces revenue on refund occurrence date');
+  assert.equal(refundDay.rows[0].has_revenue_record, false, 'refund-only date is not counted as a revenue day');
+  let invalid = false;
+  try { await db.exec(`insert into public.business_orders(ledger_id,order_date,title) values ('${(await db.query("select id from public.ledgers where kind='personal'")).rows[0].id}','2026-11-18','bad');`); }
+  catch { invalid = true; }
+  assert.ok(invalid, 'business orders cannot enter the personal ledger');
+  const recurring = (await db.query(`insert into public.recurring_expenses(ledger_id,name,amount,due_day)
+    values ('${business}','场地固定费',100,31) returning id`)).rows[0].id;
+  const expenseCategory=(await db.query(`insert into public.categories(ledger_id,name,flow) values ('${business}','经营成本','expense') returning id`)).rows[0].id;
+  const generated1 = await db.query(`select public.generate_recurring_instances('${business}','2026-02-01') as n`);
+  const generated2 = await db.query(`select public.generate_recurring_instances('${business}','2026-02-01') as n`);
+  assert.equal(generated1.rows[0].n, 1, 'monthly pending instance generated once');
+  assert.equal(generated2.rows[0].n, 0, 'repeat generation is idempotent');
+  const instance = (await db.query(`select id from public.recurring_expense_instances where recurring_expense_id='${recurring}'`)).rows[0].id;
+  assert.equal((await db.query(`select due_on::text from public.recurring_expense_instances where id='${instance}'`)).rows[0].due_on, '2026-02-28', 'day 31 clamps to February end');
+  assert.equal((await db.query(`select count(*)::int as n from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-02-28'`)).rows[0].n, 0, 'pending plan is not actual expense');
+  const expenseRequest='44444444-4444-4444-8444-444444444444';
+  const confirm=`select public.confirm_recurring_instance('${instance}','${expenseRequest}','${account}','${expenseCategory}',105,'2026-02-28','confirmed bill')`;
+  await db.exec(`${confirm}; ${confirm};`);
+  const actual=(await db.query(`select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-02-28'`)).rows[0];
+  assert.equal(Number(actual.expense),105,'only confirmed actual amount is counted once');
+  await db.exec('reset role');
+  console.log('PASS migration/RLS; order-date revenue/refund; idempotent income; monthly pending generation; pending exclusion; confirmed expense and retry idempotency.');
+} finally { await db.close(); }

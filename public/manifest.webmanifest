@@ -1,0 +1,12 @@
+{
+  "name": "记祝账",
+  "short_name": "记祝账",
+  "description": "个人生活与 Mac 业务分账记账",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f2f5f6",
+  "theme_color": "#237c70",
+  "lang": "zh-CN",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
