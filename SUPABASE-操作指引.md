@@ -14,15 +14,11 @@
 
 ## Hosted 迁移状态已完成
 
-当前 SQL Editor 会话曾重复显示旧查询错误（`LINE 3: begin;`），并且计算机控制工具后来因无法验证页面 URL 停止。不要把旧结果当成新迁移成功，也不要重复运行 `0001`。待能够使用该项目的 SQL Editor 时，为每个迁移分别新建独立查询、粘贴对应文件的完整内容、确认 SQL 编辑器显示的内容确实已替换，再执行并独立检查结果。
+此前 SQL Editor 的旧错误记录已被后续成功执行及只读核验 supersede。0002 和 0003 均已在项目“记祝账”中独立验证；不要重复执行，尤其绝不要重跑 0001。
 
-## 应用新增业务订单迁移（先运行一次）
+## 操作约束
 
-运行 `F:\AI\《记祝账》云端记账项目开发\06-云端候选\supabase\migrations\0002_business_order_costs_and_types.sql`。完成后应只通过只读 schema 查询核实新增列、两个 RPC 与 `business_order_totals` 视图；若编辑器仍报错则停止，不要改跑 `0001`。
-
-## 0003 状态与只读验收
-
-你报告已在 SQL Editor 执行 0003 并看到 `Success. No rows returned`。因此不要再运行迁移；下一步只需从 Supabase SQL Editor 执行只读查询，确认 `business_daily_revenue` 有 `revenue_date` 列、没有旧 `order_date` 输出列，并且 view option 包含 `security_invoker=true`。如果此前粘贴的是正确文件，则无需再次进行任何 schema 写入。
+0002 与 0003 均已在正确的 Supabase 项目执行并通过独立元数据核验。当前不需要你再复制 SQL、输入数据库密码或手动重跑迁移。只读核验不触及任何账务行。若将来发生 schema 改动，先按新增迁移编号执行并核验，绝不重放 0001。
 
 ## 手动重试（仅在只读核验确认为未应用时）
 
