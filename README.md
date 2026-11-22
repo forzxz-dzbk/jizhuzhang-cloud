@@ -21,6 +21,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
 - The ¥500 daily goal now assigns business income to the transaction's actual received date (`occurred_on`), never the order creation date; refunds reduce the date they occur. This correction is migration `0003_daily_goal_by_received_date.sql` and has not yet been applied to hosted Supabase.
+- A Windows-only guarded runner (`pnpm db:apply-goal-migration`) is prepared for 0003: it takes a Session Pooler URI through hidden console input, pins the project ref, inspects existing view state, applies only this migration, and verifies the resulting view without reading ledger data. It has not yet been run with a real connection URI.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
 - Owner-scoped RLS and clear client-side save errors.

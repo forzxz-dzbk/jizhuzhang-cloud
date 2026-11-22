@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "db:apply-goal-migration": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-hosted-0003.ps1",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
     "test:db": "node tests/migration.local.mjs"
@@ -20,6 +21,7 @@
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
+    "pg": "^8.23.1",
     "typescript": "~5.9.2",
     "vite": "^7.1.7"
   }

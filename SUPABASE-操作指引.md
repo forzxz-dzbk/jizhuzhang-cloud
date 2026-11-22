@@ -22,6 +22,14 @@
 
 ## 应用每日营收日期修正（0002 验证后运行）
 
+本机可优先用安全启动脚本：`F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0003.ps1`。先在 Supabase「记祝账」项目的 **Connect** 面板复制 **Session pooler URI**，然后在 PowerShell 执行：
+
+```powershell
+& 'F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0003.ps1'
+```
+
+脚本会隐藏输入完整连接 URI，仅接受项目 ref `eexsbypxhkfxqazwqgdq` 的 Supabase pooler，核验旧视图列与 `security_invoker` 后才会运行 0003；已经应用则仅核验并退出。URI 只在本机当前进程环境中短暂存在，不写文件、不打印，也不要发到聊天。这个脚本只运行指定 SQL 文件，不会重放 0001 或其他迁移。
+
 1. 打开新建的「记祝账」Supabase 项目（不要选择 `balance-test` 或 `balance-guard-e2e`）。
 2. 左侧打开 **SQL Editor**，点击 **New query**。
 3. 打开并复制 `F:\AI\《记祝账》云端记账项目开发\06-云端候选\supabase\migrations\0003_daily_goal_by_received_date.sql` 的全部内容。
