@@ -71,5 +71,18 @@ try {
   const actual=(await db.query(`select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-02-28'`)).rows[0];
   assert.equal(Number(actual.expense),105,'only confirmed actual amount is counted once');
   await db.exec('reset role');
-  console.log('PASS migration/RLS; order-date revenue/refund; idempotent income; monthly pending generation; pending exclusion; confirmed expense and retry idempotency.');
+  await db.exec(`select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
+  const recoveryLedger=(await db.query(`insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'business','恢复验证账本') returning id`)).rows[0].id;
+  const recoveryAccount=(await db.query(`insert into public.accounts(ledger_id,name) values ('${recoveryLedger}','恢复验证账户') returning id`)).rows[0].id;
+  const recoveryCategory=(await db.query(`insert into public.categories(ledger_id,name,flow) values ('${recoveryLedger}','恢复验证支出','expense') returning id`)).rows[0].id;
+  const recoveryTemplate=(await db.query(`insert into public.recurring_expenses(ledger_id,name,amount,due_day) values ('${recoveryLedger}','恢复验证固定费',105,1) returning id`)).rows[0].id;
+  const recoveryInstance='77777777-7777-4777-8777-777777777777';
+  const recoveryTransaction='88888888-8888-4888-8888-888888888888';
+  await db.exec(`insert into public.recurring_expense_instances(id,ledger_id,recurring_expense_id,due_on,status) values ('${recoveryInstance}','${recoveryLedger}','${recoveryTemplate}','2026-11-01','pending');
+    insert into public.transactions(id,ledger_id,account_id,category_id,recurring_instance_id,type,amount,occurred_on,note) values ('${recoveryTransaction}','${recoveryLedger}','${recoveryAccount}','${recoveryCategory}','${recoveryInstance}','expense',105,'2026-11-01','restored expense');
+    update public.recurring_expense_instances set status='confirmed',transaction_id='${recoveryTransaction}',confirmed_at=now() where id='${recoveryInstance}';`);
+  const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
+  assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
+  assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
+  console.log('PASS migration/RLS; order-date revenue/refund; idempotent income; monthly pending generation; pending exclusion; confirmed expense and retry idempotency; cycle-safe confirmed-recurring restore staging.');
 } finally { await db.close(); }

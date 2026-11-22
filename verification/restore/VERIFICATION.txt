@@ -27,3 +27,23 @@ MODIFIED stdout: RESTORE_AVAILABLE=true | EMPTY_ACCOUNT_GUARD=true | CONFIRM_BEF
 ROLLBACK stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
 ROLLBACK_HASH_MATCHES_BASELINE=True
 Additional checks: Supabase Auth health HTTP 200; pnpm test 12/12; pnpm test:db PASS; pnpm build PASS; pnpm audit --prod no known vulnerabilities; Vercel config parses and Vite SPA build succeeds.
+
+Continuation: reciprocal-FK restore fix; command: node -e <cycle-safe behavior check> <role file>.
+BASELINE stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+MODIFIED stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 77BF425B8B86F2FD11A82ED360C3C2638A7E19BB933B709D3AF3AB8DE87ED3E4
+ROLLBACK stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+ROLLBACK_HASH_MATCHES_BASELINE=True
+Verified new DB test: cycle-safe confirmed-recurring restore staging; pnpm test 13/13; pnpm build PASS; pnpm audit --prod no known vulnerabilities.
+
+Corrected follow-up behavior check. The previous check matcher used the wrong quote style and is superseded; the implementation SQL uses single quotes. Command: node -e <stage helper + table order + upsert check> <role copy>.
+BASELINE stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+MODIFIED stdout: CYCLE_SAFE_RESTORE=true | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 77BF425B8B86F2FD11A82ED360C3C2638A7E19BB933B709D3AF3AB8DE87ED3E4
+ROLLBACK stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+MODIFIED_EQUALS_CURRENT_SOURCE=True
+
+ROLLBACK_SCRIPT: sh ROLLBACK.sh <separate MODIFIED_FILE copy>
+ROLLBACK behavior was observed in preceding command; exit status 0.
+ROLLBACK_HASH=
+2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
+ROLLBACK_HASH_MATCHES_BASELINE=
+True

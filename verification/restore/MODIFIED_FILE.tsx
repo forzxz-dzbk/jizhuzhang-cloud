@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { stageRecurringInstances } from './backup-restore.mjs';
 
 const TABLES = [
   'ledgers',
@@ -13,7 +14,8 @@ const TABLES = [
 ] as const;
 type BackupTable = (typeof TABLES)[number];
 type Backup = { format: string; version: number; owner_id: string; tables: Record<BackupTable, Record<string, unknown>[]> };
-const RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'transactions', 'recurring_expense_instances'];
+const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses'];
+const ROLLBACK_ORDER: BackupTable[] = [...CORE_RESTORE_ORDER, 'recurring_expense_instances', 'transactions'];
 
 async function readAllRows(table: (typeof TABLES)[number]) {
   if (!supabase) throw new Error('云端服务未配置，无法创建备份。');
@@ -33,7 +35,8 @@ export function CloudBackup({ session }: { session: Session }) {
   const [notice, setNotice] = useState('');
 
   async function restoreBackup(file: File) {
-    if (!supabase) throw new Error('云端服务未配置，无法恢复备份。');
+    const client = supabase;
+    if (!client) throw new Error('云端服务未配置，无法恢复备份。');
     if (file.size > 100 * 1024 * 1024) throw new Error('备份文件超过 100 MB，请使用桌面端或拆分后再试。');
     const value = JSON.parse(await file.text()) as Partial<Backup>;
     if (value.format !== 'jizhuzhang-cloud-backup' || value.version !== 1 || value.owner_id !== session.user.id || !value.tables) {
@@ -47,7 +50,7 @@ export function CloudBackup({ session }: { session: Session }) {
     if (value.tables.ledgers.some(row => row.owner_id !== session.user.id)) throw new Error('备份账本所属账号不一致。');
     const tables = value.tables as Backup['tables'];
     for (const table of TABLES) {
-      const { data, error } = await supabase.from(table).select('id').limit(1);
+      const { data, error } = await client.from(table).select('id').limit(1);
       if (error) throw new Error(`恢复前检查 ${table} 失败：${error.message}`);
       if (data?.length) throw new Error('为避免覆盖或混合现有数据，恢复仅允许在此账号所有账本均为空时执行。');
     }
@@ -55,21 +58,33 @@ export function CloudBackup({ session }: { session: Session }) {
 
     const inserted: Partial<Record<BackupTable, string[]>> = {};
     try {
-      for (const table of RESTORE_ORDER) {
-        const rows = tables[table];
+      const insertRows = async (table: BackupTable, rows: Record<string, unknown>[]) => {
         for (let start = 0; start < rows.length; start += 100) {
           const chunk = rows.slice(start, start + 100);
-          const { error } = await supabase.from(table).insert(chunk);
+          const { error } = await client.from(table).insert(chunk);
           if (error) throw new Error(`${table}写入失败：${error.message}`);
           inserted[table] = [...(inserted[table] ?? []), ...chunk.map(row => String(row.id))];
         }
+      };
+      for (const table of CORE_RESTORE_ORDER) await insertRows(table, tables[table]);
+
+      // The schema has reciprocal FKs: transactions.recurring_instance_id ->
+      // instances.id, and instances.transaction_id -> transactions.id. Stage
+      // instances as pending, insert the transactions, then restore confirmed state.
+      await insertRows('recurring_expense_instances', stageRecurringInstances(tables.recurring_expense_instances));
+      await insertRows('transactions', tables.transactions);
+      const confirmedInstances = tables.recurring_expense_instances.filter(row => row.status === 'confirmed');
+      for (let start = 0; start < confirmedInstances.length; start += 100) {
+        const chunk = confirmedInstances.slice(start, start + 100);
+        const { error } = await client.from('recurring_expense_instances').upsert(chunk, { onConflict: 'id' });
+        if (error) throw new Error(`已确认固定支出恢复失败：${error.message}`);
       }
     } catch (cause) {
       const rollbackErrors: string[] = [];
-      for (const table of [...RESTORE_ORDER].reverse()) {
+      for (const table of [...ROLLBACK_ORDER].reverse()) {
         const ids = inserted[table];
         if (!ids?.length) continue;
-        const { error } = await supabase.from(table).delete().in('id', ids);
+        const { error } = await client.from(table).delete().in('id', ids);
         if (error) rollbackErrors.push(`${table}回滚失败：${error.message}`);
       }
       const detail = cause instanceof Error ? cause.message : '未知错误';

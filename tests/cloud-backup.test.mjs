@@ -20,5 +20,8 @@ test('cloud backup exports every ledger table through the authenticated client w
   assert.match(backup, /\.insert\(chunk\)/);
   assert.match(backup, /已尝试撤销本次写入/);
   assert.match(backup, /\.delete\(\)\.in\('id', ids\)/);
+  assert.match(backup, /stageRecurringInstances\(tables\.recurring_expense_instances\)/);
+  assert.match(backup, /insert the transactions, then restore confirmed state/);
+  assert.match(backup, /\.upsert\(chunk, \{ onConflict: 'id' \}\)/);
   assert.match(backup, /下载完整云端备份/);
 });
