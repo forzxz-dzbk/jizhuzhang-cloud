@@ -6,6 +6,20 @@
 - 你此前确认核心迁移 `0001_cloud_foundation.sql` 与 Realtime SQL 均已执行成功。**不要再次运行 0001**，它不是可重复执行的初始化脚本。
 - 新版本所需的 `0002_business_order_costs_and_types.sql` 是新增列、约束、函数和视图的事务式增量迁移；本地 PGlite 已通过生活/业务分账、订单退款、订单成本、经营结余、RLS 和幂等写入测试。它尚未应用到托管项目。
 
+## Hosted SQL 迁移状态
+
+- `0001_cloud_foundation.sql`：核心架构曾成功执行；绝不要重跑。
+- `0002_business_order_costs_and_types.sql`：你报告 SQL Editor 返回 `Success. No rows returned`；我们尚未从线上独立读取 schema，因此按已报告成功记录，但不把未验证的线上功能当作验收通过。
+- `0003_daily_goal_by_received_date.sql`：新发现的 P0 财务准确性修正，尚未应用。¥500 目标应按收入流水实际到账日 `transactions.occurred_on` 统计，而非业务订单创建日 `business_orders.order_date`；退款仍按实际退款日扣减。
+
+## 应用每日营收日期修正（下一次只运行此文件）
+
+1. 打开新建的「记祝账」Supabase 项目（不要选择 `balance-test` 或 `balance-guard-e2e`）。
+2. 左侧打开 **SQL Editor**，点击 **New query**。
+3. 打开并复制 `F:\AI\《记祝账》云端记账项目开发\06-云端候选\supabase\migrations\0003_daily_goal_by_received_date.sql` 的全部内容。
+4. 粘贴后点击 **Run**。本迁移仅重建统计视图，不改写账单、不插入数据；成功时 `Success. No rows returned` 正常。
+5. 本迁移只运行一次；不要重跑 `0001` 或 `0002`。错误时保留错误文本，不要尝试运行其它迁移覆盖它。
+
 ## 应用新增业务订单迁移（仅需一次）
 
 1. 登录 Supabase Dashboard，打开你之前为「记祝账」创建的**新项目**。不要选择 `balance-test`、`balance-guard-e2e` 或其他旧项目。

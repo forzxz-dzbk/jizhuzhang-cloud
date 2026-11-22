@@ -18,6 +18,8 @@ try {
   await db.exec(migration.replace('create extension if not exists pgcrypto;', ''));
   const businessMigration = await readFile(new URL('../supabase/migrations/0002_business_order_costs_and_types.sql', import.meta.url), 'utf8');
   await db.exec(businessMigration);
+  const receivedDateMigration = await readFile(new URL('../supabase/migrations/0003_daily_goal_by_received_date.sql', import.meta.url), 'utf8');
+  await db.exec(receivedDateMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -40,9 +42,16 @@ try {
   await db.exec(`${request}; ${request};`);
   const orderCount = await db.query("select count(*)::int as n from public.business_orders where title='订单'");
   assert.equal(orderCount.rows[0].n, 1, 'retry uses same idempotency key and does not duplicate order');
-  const target = await db.query(`select revenue,goal_reached from public.business_daily_revenue where ledger_id='${business}'`);
+  const target = await db.query(`select revenue_date::text as revenue_date,revenue,goal_reached from public.business_daily_revenue where ledger_id='${business}'`);
   assert.equal(Number(target.rows[0].revenue), 500);
-  assert.equal(target.rows[0].goal_reached, true, 'order-date goal at 500 is achieved');
+  assert.equal(target.rows[0].revenue_date, '2026-11-18', 'daily target follows actual received transaction date, not order date');
+  assert.equal(target.rows[0].goal_reached, true, 'actual received revenue reaches the 500 threshold');
+  const orderDay = await db.query(`select revenue_date from public.business_daily_revenue where ledger_id='${business}' and revenue_date='2026-11-17'`);
+  assert.equal(orderDay.rows.length, 0, 'placing an order does not record cash received that day');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
+  const isolatedRevenue = await db.query(`select count(*)::int as n from public.business_daily_revenue where ledger_id='${business}'`);
+  assert.equal(isolatedRevenue.rows[0].n, 0, 'security-invoker revenue view respects owner RLS');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;`);
   const orderId = (await db.query("select id from public.business_orders where title='订单'")).rows[0].id;
   const refundId='55555555-5555-4555-8555-555555555555';
   const refundRequest=`select public.create_transaction('${refundId}','${business}','refund','${account}',100,'2026-11-19','',null,null,null,null,'${orderId}')`;
@@ -50,7 +59,7 @@ try {
   let refundTooLarge=false;
   try{await db.exec(`select public.create_transaction('66666666-6666-4666-8666-666666666666','${business}','refund','${account}',401,'2026-11-20','',null,null,null,null,'${orderId}')`)}catch{refundTooLarge=true;}
   assert.ok(refundTooLarge,'refund cannot exceed original received amount');
-  const refundDay = await db.query(`select revenue,has_revenue_record from public.business_daily_revenue where ledger_id='${business}' and order_date='2026-11-19'`);
+  const refundDay = await db.query(`select revenue,has_revenue_record from public.business_daily_revenue where ledger_id='${business}' and revenue_date='2026-11-19'`);
   assert.equal(Number(refundDay.rows[0].revenue), -100, 'refund reduces revenue on refund occurrence date');
   assert.equal(refundDay.rows[0].has_revenue_record, false, 'refund-only date is not counted as a revenue day');
   let invalid = false;
@@ -113,5 +122,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0002/RLS; split ledgers; order-date revenue/refund; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0003/RLS; split ledgers; actual-received-date revenue; refund-occurrence-date reductions; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }
