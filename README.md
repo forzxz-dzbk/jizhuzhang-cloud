@@ -15,6 +15,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Email/password sign-in, sign-up, password recovery, persisted-session restoration, and sign-out.
 - Separate personal and Mac-business ledgers; ledger, account, category, and transaction views.
 - Server-side note search and page navigation across the full ledger history; literal `%`, `_`, and `\` are escaped rather than interpreted as search wildcards.
+- Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
 - Owner-scoped RLS and clear client-side save errors.

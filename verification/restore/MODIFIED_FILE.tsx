@@ -6,10 +6,11 @@ import { RecurringExpenses } from './RecurringExpenses';
 import { LedgerOverview } from './LedgerOverview';
 import { CloudBackup } from './CloudBackup';
 import { escapeLikePattern } from './transaction-search.mjs';
+import { AccountBalances } from './AccountBalances';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = { id: string; type: string; amount: number; occurred_on: string; note: string };
-type Account = { id: string; name: string };
+type Account = { id: string; name: string; opening_balance: number | string };
 type Category = { id: string; name: string; flow: 'income' | 'expense' };
 type BusinessOrder = { id: string; title: string; order_date: string };
 const TRANSACTION_PAGE_SIZE = 100;
@@ -83,7 +84,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   const loadOptions = useCallback(async () => {
     if (!supabase || !selected) { setAccounts([]); setCategories([]); return; }
     const [a, c, o] = await Promise.all([
-      supabase.from('accounts').select('id,name').eq('ledger_id', selected).eq('is_archived', false).order('name'),
+      supabase.from('accounts').select('id,name,opening_balance').eq('ledger_id', selected).eq('is_archived', false).order('name'),
       supabase.from('categories').select('id,name,flow').eq('ledger_id', selected).eq('is_archived', false).order('name'),
       supabase.from('business_orders').select('id,title,order_date').eq('ledger_id', selected).order('order_date',{ascending:false}),
     ]);
@@ -120,10 +121,16 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!supabase || !selected) return;
+    const formElement = event.currentTarget;
+    const openingBalanceText = String(new FormData(formElement).get('opening_balance') ?? '').trim();
+    const openingBalance = Number(openingBalanceText);
+    if (!openingBalanceText || !Number.isFinite(openingBalance) || Math.abs(openingBalance) >= 1_000_000_000_000 || Math.abs(openingBalance * 100 - Math.round(openingBalance * 100)) > 1e-8) {
+      setError('期初余额必须是有效金额，最多两位小数。'); return;
+    }
     setBusy(true); setError('');
-    const { error: e } = await supabase.from('accounts').insert({ ledger_id: selected, name: accountName.trim() });
+    const { error: e } = await supabase.from('accounts').insert({ ledger_id: selected, name: accountName.trim(), opening_balance: openingBalance });
     if (e) setError(`账户保存失败：${e.message}`);
-    else { setAccountName(''); await loadOptions(); setNotice('账户已保存到云端。'); }
+    else { setAccountName(''); formElement.reset(); await loadOptions(); setNotice('账户已保存到云端。'); }
     setBusy(false);
   }
   async function createCategory(event: FormEvent<HTMLFormElement>, flow: Category['flow']) {
@@ -188,9 +195,10 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       }} />}
       {active && <section className="panel"><h2>{active.name} · 近期明细</h2>
         <section className="setup-grid">
-          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><button disabled={busy}>保存账户</button></form>
+          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><label>期初余额（CNY）<input name="opening_balance" type="number" step="0.01" required defaultValue="0"/></label><small>这是首次使用时的起点余额；负数可用于记录信用卡等负债。</small><button disabled={busy}>保存账户</button></form>
           <form onSubmit={e=>void createCategory(e, categoryFlow)}><h3>新增分类</h3><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="例如：餐饮或工资"/><button disabled={busy}>保存分类</button></form>
         </section>
+        <AccountBalances ledgerId={active.id} accounts={accounts}/>
         <form className="entry-form" onSubmit={createTransaction}>
           <h3>新增流水</h3>
           <label>类型<select value={entryType} onChange={e=>setEntryType(e.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>
