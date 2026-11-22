@@ -15,6 +15,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Email/password sign-in, sign-up, password recovery, persisted-session restoration, and sign-out.
 - Separate personal and Mac-business ledgers; ledger, account, category, and transaction views.
 - Server-side note search and page navigation across the full ledger history; literal `%`, `_`, and `\` are escaped rather than interpreted as search wildcards.
+- Transaction history shows account, category and linked business order (including transfers/refunds) so each amount can be audited from the list.
 - Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.

@@ -10,7 +10,11 @@ import { AccountBalances } from './AccountBalances';
 import { BusinessOrderStatistics } from './BusinessOrderStatistics';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
-type Transaction = { id: string; type: string; amount: number; occurred_on: string; note: string };
+type Transaction = {
+  id: string; type: string; amount: number; occurred_on: string; note: string;
+  account_id: string; transfer_account_id: string | null; category_id: string | null;
+  business_order_id: string | null; refund_order_id: string | null; cost_order_id: string | null;
+};
 type Account = { id: string; name: string; opening_balance: number | string };
 type Category = { id: string; name: string; flow: 'income' | 'expense' };
 type BusinessOrder = { id: string; title: string; order_date: string };
@@ -64,7 +68,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if(!client||!selected){setTransactions([]);setHasMoreTransactions(false);setTransactionsLoading(false);return;}
     setTransactionsLoading(true);
     try {
-      let request=client.from('transactions').select('id,type,amount,occurred_on,note')
+      let request=client.from('transactions').select('id,type,amount,occurred_on,note,account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id')
         .eq('ledger_id',selected).order('occurred_on',{ascending:false});
       if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
       const start=page*TRANSACTION_PAGE_SIZE;
@@ -193,6 +197,18 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   }
 
   const active = ledgers.find(row => row.id === selected);
+  const transactionDetails = (row: Transaction) => {
+    const account = (id: string) => accounts.find(item => item.id === id)?.name ?? '已归档账户';
+    const category = row.category_id ? categories.find(item => item.id === row.category_id)?.name ?? '已归档分类' : '';
+    const orderId = row.business_order_id ?? row.refund_order_id ?? row.cost_order_id;
+    const order = orderId ? orders.find(item => item.id === orderId) : null;
+    const label = row.type === 'income' ? '收入' : row.type === 'expense' ? '支出' : row.type === 'transfer' ? '内部转账' : '业务退款';
+    const details = row.type === 'transfer'
+      ? [`转出：${account(row.account_id)}`, `转入：${row.transfer_account_id ? account(row.transfer_account_id) : '未知账户'}`]
+      : [account(row.account_id), category].filter(Boolean);
+    if (order) details.push(`订单：${order.title}`);
+    return { label, details: details.join(' · ') };
+  };
   return <main className="dashboard">
     <header className="dash-header"><div><div className="brand">记祝账</div><p>{session.user.email}</p></div><button className="secondary" onClick={onSignOut}>退出登录</button></header>
     <h1>你的账本</h1><p>个人生活与 Mac 业务分开保存、分开统计。</p>
@@ -241,7 +257,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
         </div>
         {transactionsLoading && <p role="status">正在加载云端流水…</p>}
         {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
-        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => <li key={row.id}><span>{row.occurred_on} · {row.note || (row.type === 'transfer' ? '内部转账' : row.type)}</span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>)}</ul>}
+        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{row.occurred_on} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
       </section>}
     </>}
     {notice && <p className="notice" role="status">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}
