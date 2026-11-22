@@ -8,7 +8,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: `pnpm test` (21/21), `pnpm test:db` (pass for migrations 0001–0003 and business/RLS/restore flows), `pnpm build` (pass), and `pnpm audit --prod` (no known vulnerabilities).
+- Latest local evidence: `pnpm test` (24/24), `pnpm test:db` (pass for migrations 0001–0003 and business/RLS/restore flows), `pnpm build` (pass), and `pnpm audit --prod` (no known vulnerabilities).
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -20,8 +20,8 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
 - Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
-- The ¥500 daily goal now assigns business income to the transaction's actual received date (`occurred_on`), never the order creation date; refunds reduce the date they occur. This correction is migration `0003_daily_goal_by_received_date.sql` and has not yet been applied to hosted Supabase.
-- A Windows-only guarded runner (`pnpm db:apply-goal-migration`) is prepared for 0003: it takes a Session Pooler URI through hidden console input, pins the project ref, inspects existing view state, applies only this migration, and verifies the resulting view without reading ledger data. It has not yet been run with a real connection URI.
+- The ¥500 daily goal now assigns business income to the transaction's actual received date (`occurred_on`), never the order creation date; refunds reduce the date they occur. The owner reports `Success. No rows returned` after running migration `0003_daily_goal_by_received_date.sql` in Supabase SQL Editor. Independent hosted-schema verification remains pending; rely on that reported result only, and do not rerun 0003 blindly.
+- A Windows-only guarded runner (`pnpm db:apply-goal-migration`) is prepared for 0003: it takes a Session Pooler URI through hidden console input, pins the project ref, inspects existing view state, applies only this migration if needed, and verifies the resulting view without reading ledger data. It has not been run with a real connection URI.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
 - Owner-scoped RLS and clear client-side save errors.
@@ -33,7 +33,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Migration `0002_business_order_costs_and_types.sql` is not verified on hosted Supabase; an inspection found its `business_type` column absent. The hosted SQL Editor attempts observed an error, not success. Never rerun the non-idempotent `0001` foundation migration.
-- Apply the newly added `0003_daily_goal_by_received_date.sql` once before using the live ¥500 calendar; first verify the project is the new 记祝账 project and never run `0001` again.
+- Independently verify hosted `business_daily_revenue.revenue_date` and `security_invoker=true` before relying on the live ¥500 calendar; the owner reports 0003 succeeded, but schema verification is pending. Never run `0001` again.
 - Supabase email-confirmation and password-recovery redirect settings must be checked for the final deployment URL.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
 - Local Git is on `main`; `.env.local` is ignored and was not included. No GitHub remote, GitHub CLI, Vercel CLI, or deployment token is available in this workspace.

@@ -10,7 +10,7 @@
 
 - `0001_cloud_foundation.sql`：核心架构曾成功执行；绝不要重跑。
 - `0002_business_order_costs_and_types.sql`：已在新建的空白 SQL 查询中执行并返回 `Success. No rows returned`；只读核验已确认新增列、视图、两个业务 RPC 和业务订单 RLS。早先 `42601` 错误来自旧查询内容。
-- `0003_daily_goal_by_received_date.sql`：新发现的 P0 财务准确性修正，尚未应用。¥500 目标应按收入流水实际到账日 `transactions.occurred_on` 统计，而非业务订单创建日 `business_orders.order_date`；退款仍按实际退款日扣减。
+- `0003_daily_goal_by_received_date.sql`：你刚报告在 SQL Editor 得到 `Success. No rows returned`，按已执行记录；独立 schema 核验仍待完成。该修正令 ¥500 目标按收入流水实际到账日 `transactions.occurred_on` 统计，而非业务订单创建日；退款仍按实际退款日扣减。**不要盲目重跑 0003**。
 
 ## 先完成业务订单迁移，再完成到账日期修正
 
@@ -20,7 +20,11 @@
 
 运行 `F:\AI\《记祝账》云端记账项目开发\06-云端候选\supabase\migrations\0002_business_order_costs_and_types.sql`。完成后应只通过只读 schema 查询核实新增列、两个 RPC 与 `business_order_totals` 视图；若编辑器仍报错则停止，不要改跑 `0001`。
 
-## 应用每日营收日期修正（0002 验证后运行）
+## 0003 状态与只读验收
+
+你报告已在 SQL Editor 执行 0003 并看到 `Success. No rows returned`。因此不要再运行迁移；下一步只需从 Supabase SQL Editor 执行只读查询，确认 `business_daily_revenue` 有 `revenue_date` 列、没有旧 `order_date` 输出列，并且 view option 包含 `security_invoker=true`。如果此前粘贴的是正确文件，则无需再次进行任何 schema 写入。
+
+## 手动重试（仅在只读核验确认为未应用时）
 
 本机可优先用安全启动脚本：`F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0003.ps1`。先在 Supabase「记祝账」项目的 **Connect** 面板复制 **Session pooler URI**，然后在 PowerShell 执行：
 
