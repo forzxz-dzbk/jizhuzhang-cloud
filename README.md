@@ -5,11 +5,11 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 ## Current delivery status (2026-11-22)
 
 - Supabase project is connected through local `.env.local` using only the browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never add a service-role key to client configuration or source control.
-- The core migration was applied in the Supabase Dashboard. The owner reported the migration's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
+- The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
 - Latest local evidence: `pnpm test` (21/21), `pnpm test:db` (pass for migrations 0001–0003 and business/RLS/restore flows), `pnpm build` (pass), and `pnpm audit --prod` (no known vulnerabilities).
-- The owner reported the latest hosted SQL Editor run returned `Success. No rows returned`. This was treated as the result of the requested additive `0002_business_order_costs_and_types.sql`; hosted schema introspection has not yet independently verified its objects, so do not claim live business-order support until checked.
+- `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
 
@@ -31,7 +31,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Formal public deployment URL and GitHub remote are not configured. The candidate has a local Git repository with committed source, but no GitHub remote, Vercel CLI, or linked Vercel project.
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
-- Migration `0002_business_order_costs_and_types.sql` was reported successful in the hosted SQL Editor, but its resulting columns, RPCs, and view still need read-only confirmation. Do not rerun `0002` blindly; never rerun the non-idempotent `0001` foundation migration.
+- Migration `0002_business_order_costs_and_types.sql` is not verified on hosted Supabase; an inspection found its `business_type` column absent. The hosted SQL Editor attempts observed an error, not success. Never rerun the non-idempotent `0001` foundation migration.
 - Apply the newly added `0003_daily_goal_by_received_date.sql` once before using the live ¥500 calendar; first verify the project is the new 记祝账 project and never run `0001` again.
 - Supabase email-confirmation and password-recovery redirect settings must be checked for the final deployment URL.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
