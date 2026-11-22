@@ -25,6 +25,8 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has only been locally built and statically tested; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Supabase email-confirmation and password-recovery redirect settings must be checked for the final deployment URL.
+- The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
+- A local Git repository was initialized on `main` and committed as `d833739`; `.env.local` is ignored and was not included. No GitHub remote, GitHub CLI, Vercel CLI, or deployment token is available in this workspace.
 
 ## Local setup and checks
 
