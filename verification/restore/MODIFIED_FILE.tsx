@@ -1,136 +1,209 @@
-import { useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import { stageRecurringInstances } from './backup-restore.mjs';
+import { RevenueCalendar } from './RevenueCalendar';
+import { RecurringExpenses } from './RecurringExpenses';
+import { LedgerOverview } from './LedgerOverview';
+import { CloudBackup } from './CloudBackup';
+import { escapeLikePattern } from './transaction-search.mjs';
 
-const TABLES = [
-  'ledgers',
-  'accounts',
-  'categories',
-  'business_orders',
-  'recurring_expenses',
-  'transactions',
-  'recurring_expense_instances',
-] as const;
-type BackupTable = (typeof TABLES)[number];
-type Backup = { format: string; version: number; owner_id: string; tables: Record<BackupTable, Record<string, unknown>[]> };
-const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses'];
-const ROLLBACK_ORDER: BackupTable[] = [...CORE_RESTORE_ORDER, 'recurring_expense_instances', 'transactions'];
+type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
+type Transaction = { id: string; type: string; amount: number; occurred_on: string; note: string };
+type Account = { id: string; name: string };
+type Category = { id: string; name: string; flow: 'income' | 'expense' };
+type BusinessOrder = { id: string; title: string; order_date: string };
+const TRANSACTION_PAGE_SIZE = 100;
 
-async function readAllRows(table: (typeof TABLES)[number]) {
-  if (!supabase) throw new Error('云端服务未配置，无法创建备份。');
-  const rows: Record<string, unknown>[] = [];
-  const pageSize = 500;
-  for (let start = 0; ; start += pageSize) {
-    const { data, error } = await supabase.from(table).select('*').range(start, start + pageSize - 1);
-    if (error) throw new Error(`${table}读取失败：${error.message}`);
-    rows.push(...(data ?? []) as Record<string, unknown>[]);
-    if (!data || data.length < pageSize) return rows;
-  }
-}
-
-export function CloudBackup({ session }: { session: Session }) {
+export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut: () => Promise<void> }) {
+  const [ledgers, setLedgers] = useState<Ledger[]>([]);
+  const [selected, setSelected] = useState('');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [transactionPage, setTransactionPage] = useState(0);
+  const [hasMoreTransactions, setHasMoreTransactions] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [orders, setOrders] = useState<BusinessOrder[]>([]);
+  const [accountName, setAccountName] = useState('');
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryFlow, setCategoryFlow] = useState<Category['flow']>('expense');
+  const [entryType, setEntryType] = useState<'income' | 'expense' | 'transfer' | 'refund'>('expense');
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [syncState,setSyncState]=useState('连接实时同步…');
 
-  async function restoreBackup(file: File) {
-    const client = supabase;
-    if (!client) throw new Error('云端服务未配置，无法恢复备份。');
-    if (file.size > 100 * 1024 * 1024) throw new Error('备份文件超过 100 MB，请使用桌面端或拆分后再试。');
-    const value = JSON.parse(await file.text()) as Partial<Backup>;
-    if (value.format !== 'jizhuzhang-cloud-backup' || value.version !== 1 || value.owner_id !== session.user.id || !value.tables) {
-      throw new Error('备份格式、版本或所属账号不匹配；只能恢复此账号导出的备份。');
+  const loadLedgers = useCallback(async () => {
+    if (!supabase) return;
+    setLoading(true); setError('');
+    const { data, error: queryError } = await supabase.from('ledgers').select('id,kind,name').order('kind');
+    if (queryError) setError(`云端账本读取失败：${queryError.message}`);
+    else {
+      const found = (data ?? []) as Ledger[];
+      setLedgers(found);
+      setSelected(current => found.some(row => row.id === current) ? current : found[0]?.id ?? '');
     }
-    for (const table of TABLES) {
-      if (!Array.isArray(value.tables[table]) || value.tables[table].some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
-        throw new Error(`备份中的 ${table} 数据格式无效。`);
-      }
-    }
-    if (value.tables.ledgers.some(row => row.owner_id !== session.user.id)) throw new Error('备份账本所属账号不一致。');
-    const tables = value.tables as Backup['tables'];
-    for (const table of TABLES) {
-      const { data, error } = await client.from(table).select('id').limit(1);
-      if (error) throw new Error(`恢复前检查 ${table} 失败：${error.message}`);
-      if (data?.length) throw new Error('为避免覆盖或混合现有数据，恢复仅允许在此账号所有账本均为空时执行。');
-    }
-    if (!window.confirm(`即将恢复 ${Object.values(tables).reduce((n, rows) => n + rows.length, 0)} 条备份记录到空账号。此操作不可撤销，是否继续？`)) return;
+    setLoading(false);
+  }, []);
 
-    const inserted: Partial<Record<BackupTable, string[]>> = {};
-    try {
-      const insertRows = async (table: BackupTable, rows: Record<string, unknown>[]) => {
-        for (let start = 0; start < rows.length; start += 100) {
-          const chunk = rows.slice(start, start + 100);
-          const { error } = await client.from(table).insert(chunk);
-          if (error) throw new Error(`${table}写入失败：${error.message}`);
-          inserted[table] = [...(inserted[table] ?? []), ...chunk.map(row => String(row.id))];
-        }
-      };
-      for (const table of CORE_RESTORE_ORDER) await insertRows(table, tables[table]);
-
-      // The schema has reciprocal FKs: transactions.recurring_instance_id ->
-      // instances.id, and instances.transaction_id -> transactions.id. Stage
-      // instances as pending, insert the transactions, then restore confirmed state.
-      await insertRows('recurring_expense_instances', stageRecurringInstances(tables.recurring_expense_instances));
-      await insertRows('transactions', tables.transactions);
-      const confirmedInstances = tables.recurring_expense_instances.filter(row => row.status === 'confirmed');
-      for (let start = 0; start < confirmedInstances.length; start += 100) {
-        const chunk = confirmedInstances.slice(start, start + 100);
-        const { error } = await client.from('recurring_expense_instances').upsert(chunk, { onConflict: 'id' });
-        if (error) throw new Error(`已确认固定支出恢复失败：${error.message}`);
-      }
-    } catch (cause) {
-      const rollbackErrors: string[] = [];
-      for (const table of [...ROLLBACK_ORDER].reverse()) {
-        const ids = inserted[table];
-        if (!ids?.length) continue;
-        const { error } = await client.from(table).delete().in('id', ids);
-        if (error) rollbackErrors.push(`${table}回滚失败：${error.message}`);
-      }
-      const detail = cause instanceof Error ? cause.message : '未知错误';
-      throw new Error(rollbackErrors.length ? `恢复未完成：${detail}；${rollbackErrors.join('；')}。请勿重复操作，先联系支持。` : `恢复失败，已尝试撤销本次写入：${detail}`);
+  useEffect(() => { void loadLedgers(); }, [loadLedgers]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setSearchQuery(transactionSearch.trim()); setTransactionPage(0); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [transactionSearch]);
+  const loadTransactions=useCallback(async(page=transactionPage,filter=searchQuery)=>{
+    if(!supabase||!selected){setTransactions([]);setHasMoreTransactions(false);return;}
+    let request=supabase.from('transactions').select('id,type,amount,occurred_on,note')
+      .eq('ledger_id',selected).order('occurred_on',{ascending:false});
+    if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
+    const start=page*TRANSACTION_PAGE_SIZE;
+    const {data,error:queryError}=await request.range(start,start+TRANSACTION_PAGE_SIZE);
+    if(queryError)setError(`明细读取失败：${queryError.message}`);else {
+      const rows=(data??[]) as Transaction[];
+      setTransactions(rows.slice(0,TRANSACTION_PAGE_SIZE));
+      setHasMoreTransactions(rows.length>TRANSACTION_PAGE_SIZE);
     }
-    return Object.values(tables).reduce((n, rows) => n + rows.length, 0);
-  }
+  },[selected,transactionPage,searchQuery]);
+  useEffect(()=>{void loadTransactions();},[loadTransactions]);
+  const loadOptions = useCallback(async () => {
+    if (!supabase || !selected) { setAccounts([]); setCategories([]); return; }
+    const [a, c, o] = await Promise.all([
+      supabase.from('accounts').select('id,name').eq('ledger_id', selected).eq('is_archived', false).order('name'),
+      supabase.from('categories').select('id,name,flow').eq('ledger_id', selected).eq('is_archived', false).order('name'),
+      supabase.from('business_orders').select('id,title,order_date').eq('ledger_id', selected).order('order_date',{ascending:false}),
+    ]);
+    if (a.error || c.error || o.error) setError(`账户/分类/订单读取失败：${a.error?.message ?? c.error?.message ?? o.error?.message}`);
+    else { setAccounts((a.data ?? []) as Account[]); setCategories((c.data ?? []) as Category[]); setOrders((o.data??[]) as BusinessOrder[]); }
+  }, [selected]);
+  useEffect(() => { void loadOptions(); }, [loadOptions]);
+  useEffect(()=>{
+    const client=supabase;
+    if(!client||!selected){setSyncState('选择账本以连接同步');return;}
+    const channel=client.channel(`ledger-sync-${selected}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'transactions',filter:`ledger_id=eq.${selected}`},()=>{void loadTransactions();void loadOptions();})
+      .on('postgres_changes',{event:'*',schema:'public',table:'accounts',filter:`ledger_id=eq.${selected}`},()=>void loadOptions())
+      .on('postgres_changes',{event:'*',schema:'public',table:'categories',filter:`ledger_id=eq.${selected}`},()=>void loadOptions())
+      .on('postgres_changes',{event:'*',schema:'public',table:'recurring_expense_instances',filter:`ledger_id=eq.${selected}`},()=>void loadTransactions())
+      .subscribe(status=>setSyncState(status==='SUBSCRIBED'?'多设备实时同步已连接':'实时同步未连接；可手动刷新'));
+    return()=>{setSyncState('实时同步已断开');void client.removeChannel(channel);};
+  },[selected,loadTransactions,loadOptions]);
 
-  async function exportBackup() {
+  async function createLedger(kind: Ledger['kind']) {
+    if (!supabase) return;
     setBusy(true); setError(''); setNotice('');
-    try {
-      const tables = Object.fromEntries(await Promise.all(TABLES.map(async table => [table, await readAllRows(table)])));
-      const backup = {
-        format: 'jizhuzhang-cloud-backup',
-        version: 1,
-        exported_at: new Date().toISOString(),
-        timezone: 'Asia/Shanghai',
-        owner_id: session.user.id,
-        tables,
-      };
-      const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `记祝账-云端备份-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.append(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
-      const count = Object.values(tables as Record<string, Record<string, unknown>[]>).reduce((total, rows) => total + rows.length, 0);
-      setNotice(`云端备份已生成：${count} 条记录。请妥善保管此文件。`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '云端备份失败，请稍后重试。');
-    } finally { setBusy(false); }
+    const name = kind === 'personal' ? '个人生活' : 'Mac 业务';
+    const { data, error: insertError } = await supabase.from('ledgers')
+      .insert({ owner_id: session.user.id, kind, name }).select('id,kind,name').single();
+    if (insertError) setError(insertError.code === '23505' ? '该账本已存在，请刷新列表。' : `创建失败：${insertError.message}`);
+    else {
+      const ledger = data as Ledger;
+      setLedgers(current => [...current, ledger]); setSelected(ledger.id);
+      setNotice(`${name}账本已保存到云端。`);
+    }
+    setBusy(false);
   }
 
-  return <section className="panel" aria-labelledby="backup-title">
-    <h2 id="backup-title">云端数据备份</h2>
-    <p>导出此账号的生活与业务账本、账户、分类、订单、固定支出及全部流水。未确认的固定支出仍保持待确认状态。</p>
-    <button className="secondary" disabled={busy} onClick={() => void exportBackup()}>{busy ? '正在读取云端数据…' : '下载完整云端备份'}</button>
-    {notice && <p className="notice" role="status">{notice}</p>}
-    {error && <p className="error" role="alert">{error}</p>}
-    <label>从本账号备份恢复（仅允许空账本）<input type="file" accept="application/json,.json" disabled={busy} onChange={event => {
-      const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
-      if (!file) return;
-      setBusy(true); setError(''); setNotice('');
-      void restoreBackup(file).then(count => { if (count !== undefined) setNotice(`备份恢复完成：${count} 条记录。请刷新云端数据。`); })
-        .catch(cause => setError(cause instanceof Error ? cause.message : '恢复失败，请检查备份文件后重试。'))
-        .finally(() => setBusy(false));
-    }}/></label>
-  </section>;
+  async function createAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!supabase || !selected) return;
+    setBusy(true); setError('');
+    const { error: e } = await supabase.from('accounts').insert({ ledger_id: selected, name: accountName.trim() });
+    if (e) setError(`账户保存失败：${e.message}`);
+    else { setAccountName(''); await loadOptions(); setNotice('账户已保存到云端。'); }
+    setBusy(false);
+  }
+  async function createCategory(event: FormEvent<HTMLFormElement>, flow: Category['flow']) {
+    event.preventDefault(); if (!supabase || !selected) return;
+    setBusy(true); setError('');
+    const { error: e } = await supabase.from('categories').insert({ ledger_id: selected, name: categoryName.trim(), flow });
+    if (e) setError(`分类保存失败：${e.message}`);
+    else { setCategoryName(''); await loadOptions(); setNotice('分类已保存到云端。'); }
+    setBusy(false);
+  }
+  async function createTransaction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!supabase || !selected || !active) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const amount = Number(form.get('amount'));
+    const date = String(form.get('date'));
+    const accountId = String(form.get('account'));
+    const categoryId = entryType === 'transfer' || entryType === 'refund' ? null : String(form.get('category'));
+    const transferAccountId = entryType === 'transfer' ? String(form.get('transferAccount')) : null;
+    if (!Number.isFinite(amount) || amount <= 0) { setError('金额必须大于 0。'); return; }
+    if (entryType === 'transfer' && accountId === transferAccountId) { setError('转出与转入账户不能相同。'); return; }
+    setBusy(true); setError(''); setNotice('');
+    const args: Record<string, unknown> = {
+      p_request_id: requestId, p_ledger_id: selected, p_type: entryType,
+      p_account_id: accountId, p_amount: amount, p_occurred_on: date,
+      p_note: String(form.get('note') ?? ''), p_category_id: categoryId,
+      p_transfer_account_id: transferAccountId,
+      p_business_order_date: active.kind === 'business' && entryType === 'income' ? String(form.get('orderDate')) : null,
+      p_business_order_title: active.kind === 'business' && entryType === 'income' ? String(form.get('orderTitle')) : null,
+      p_refund_order_id: active.kind === 'business' && entryType === 'refund' ? String(form.get('refundOrder')) : null,
+    };
+    const { error: saveError } = await supabase.rpc('create_transaction', args);
+    if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
+    else {
+      setNotice('流水已保存到云端。');
+      setRequestId(crypto.randomUUID());
+      setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
+      await Promise.all([loadOptions(), loadTransactions(0,'')]);
+      formElement.reset();
+    }
+    setBusy(false);
+  }
+
+  const active = ledgers.find(row => row.id === selected);
+  return <main className="dashboard">
+    <header className="dash-header"><div><div className="brand">记祝账</div><p>{session.user.email}</p></div><button className="secondary" onClick={onSignOut}>退出登录</button></header>
+    <h1>你的账本</h1><p>个人生活与 Mac 业务分开保存、分开统计。</p>
+    <CloudBackup session={session} />
+    <section className="ledger-actions" aria-label="创建账本">
+      {!ledgers.some(row => row.kind === 'personal') && <button disabled={busy} onClick={() => void createLedger('personal')}>创建个人生活账本</button>}
+      {!ledgers.some(row => row.kind === 'business') && <button disabled={busy} onClick={() => void createLedger('business')}>创建 Mac 业务账本</button>}
+    </section>
+    {loading && <p role="status">正在读取云端账本…</p>}
+    {!loading && ledgers.length === 0 && <section className="empty"><h2>还没有账本</h2><p>创建账本后即可从真实云端读取记录。此处不会用示例账目填充。</p></section>}
+    {ledgers.length > 0 && <>
+      <nav className="ledger-tabs" aria-label="选择账本">{ledgers.map(row => <button key={row.id} className={selected === row.id ? 'selected' : 'secondary'} onClick={() => setSelected(row.id)}>{row.name}</button>)}</nav>
+      {active?.kind === 'business' && <RevenueCalendar ledgerId={active.id} />}
+      {active&&<LedgerOverview ledgerId={active.id}/>}
+      {active && <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{
+        setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
+        await loadTransactions(0,'');
+      }} />}
+      {active && <section className="panel"><h2>{active.name} · 近期明细</h2>
+        <section className="setup-grid">
+          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><button disabled={busy}>保存账户</button></form>
+          <form onSubmit={e=>void createCategory(e, categoryFlow)}><h3>新增分类</h3><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="例如：餐饮或工资"/><button disabled={busy}>保存分类</button></form>
+        </section>
+        <form className="entry-form" onSubmit={createTransaction}>
+          <h3>新增流水</h3>
+          <label>类型<select value={entryType} onChange={e=>setEntryType(e.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>
+          <label>金额（CNY）<input name="amount" type="number" min="0.01" step="0.01" required/></label>
+          <label>日期<input name="date" type="date" required defaultValue={new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date())}/></label>
+          <label>账户<select name="account" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+          {(entryType === 'income'||entryType==='expense') && <label>分类<select name="category" required>{categories.filter(c=>c.flow===entryType).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+          {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
+          {entryType === 'transfer' && <label>转入账户<select name="transferAccount" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
+          <label>备注<input name="note" maxLength={500}/></label>
+          <button disabled={busy || accounts.length===0 || ((entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType)) || (entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存流水'}</button>
+          {accounts.length===0 && <p className="error">请先创建账户。</p>}
+          {(entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType) && <p className="error">请先创建对应类型的分类。</p>}
+          {entryType==='refund'&&orders.length===0&&<p className="error">请先录入原始业务收入订单。</p>}
+        </form>
+        <div className="transaction-tools">
+          <label>按备注搜索<input type="search" aria-label="搜索备注" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="输入关键词查找云端全部流水"/></label>
+          <div className="transaction-pagination"><button className="secondary" disabled={busy||loading||transactionPage===0} onClick={()=>setTransactionPage(page=>Math.max(0,page-1))}>上一页</button><span>第 {transactionPage+1} 页</span><button className="secondary" disabled={busy||loading||!hasMoreTransactions} onClick={()=>setTransactionPage(page=>page+1)}>下一页</button></div>
+        </div>
+        {transactions.length === 0 && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
+        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => <li key={row.id}><span>{row.occurred_on} · {row.note || (row.type === 'transfer' ? '内部转账' : row.type)}</span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>)}</ul>}
+      </section>}
+    </>}
+    {notice && <p className="notice" role="status">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}
+    <div className="sync-footer"><small role="status">{syncState}</small><button className="refresh secondary" disabled={busy || loading} onClick={() => void loadLedgers()}>刷新云端数据</button></div>
+  </main>;
 }
