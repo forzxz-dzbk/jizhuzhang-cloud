@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { RevenueCalendar } from './RevenueCalendar';
@@ -22,6 +22,8 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   const [searchQuery, setSearchQuery] = useState('');
   const [transactionPage, setTransactionPage] = useState(0);
   const [hasMoreTransactions, setHasMoreTransactions] = useState(false);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const transactionRequest = useRef(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<BusinessOrder[]>([]);
@@ -55,16 +57,26 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     return () => window.clearTimeout(timer);
   }, [transactionSearch]);
   const loadTransactions=useCallback(async(page=transactionPage,filter=searchQuery)=>{
-    if(!supabase||!selected){setTransactions([]);setHasMoreTransactions(false);return;}
-    let request=supabase.from('transactions').select('id,type,amount,occurred_on,note')
-      .eq('ledger_id',selected).order('occurred_on',{ascending:false});
-    if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
-    const start=page*TRANSACTION_PAGE_SIZE;
-    const {data,error:queryError}=await request.range(start,start+TRANSACTION_PAGE_SIZE);
-    if(queryError)setError(`明细读取失败：${queryError.message}`);else {
-      const rows=(data??[]) as Transaction[];
-      setTransactions(rows.slice(0,TRANSACTION_PAGE_SIZE));
-      setHasMoreTransactions(rows.length>TRANSACTION_PAGE_SIZE);
+    const requestVersion=++transactionRequest.current;
+    const client=supabase;
+    if(!client||!selected){setTransactions([]);setHasMoreTransactions(false);setTransactionsLoading(false);return;}
+    setTransactionsLoading(true);
+    try {
+      let request=client.from('transactions').select('id,type,amount,occurred_on,note')
+        .eq('ledger_id',selected).order('occurred_on',{ascending:false});
+      if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
+      const start=page*TRANSACTION_PAGE_SIZE;
+      const {data,error:queryError}=await request.range(start,start+TRANSACTION_PAGE_SIZE);
+      if(requestVersion!==transactionRequest.current)return;
+      if(queryError)setError(`明细读取失败：${queryError.message}`);else {
+        const rows=(data??[]) as Transaction[];
+        setTransactions(rows.slice(0,TRANSACTION_PAGE_SIZE));
+        setHasMoreTransactions(rows.length>TRANSACTION_PAGE_SIZE);
+      }
+    } catch(cause) {
+      if(requestVersion===transactionRequest.current)setError(`明细读取失败：${cause instanceof Error?cause.message:'网络错误'}`);
+    } finally {
+      if(requestVersion===transactionRequest.current)setTransactionsLoading(false);
     }
   },[selected,transactionPage,searchQuery]);
   useEffect(()=>{void loadTransactions();},[loadTransactions]);
@@ -199,7 +211,8 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
           <label>按备注搜索<input type="search" aria-label="搜索备注" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="输入关键词查找云端全部流水"/></label>
           <div className="transaction-pagination"><button className="secondary" disabled={busy||loading||transactionPage===0} onClick={()=>setTransactionPage(page=>Math.max(0,page-1))}>上一页</button><span>第 {transactionPage+1} 页</span><button className="secondary" disabled={busy||loading||!hasMoreTransactions} onClick={()=>setTransactionPage(page=>page+1)}>下一页</button></div>
         </div>
-        {transactions.length === 0 && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
+        {transactionsLoading && <p role="status">正在加载云端流水…</p>}
+        {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
         {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => <li key={row.id}><span>{row.occurred_on} · {row.note || (row.type === 'transfer' ? '内部转账' : row.type)}</span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>)}</ul>}
       </section>}
     </>}

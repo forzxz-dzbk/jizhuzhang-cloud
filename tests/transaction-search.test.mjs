@@ -9,6 +9,9 @@ test('transaction search escapes LIKE wildcards and queries the complete remote 
   assert.match(home, /request\.ilike\('note',`%\$\{escapeLikePattern\(filter\)\}%`\)/);
   assert.match(home, /request\.range\(start,start\+TRANSACTION_PAGE_SIZE\)/);
   assert.match(home, /rows\.length>TRANSACTION_PAGE_SIZE/);
+  assert.match(home, /transactionRequest\.current/);
+  assert.match(home, /requestVersion!==transactionRequest\.current/);
+  assert.match(home, /正在加载云端流水/);
   assert.match(home, /搜索备注/);
   assert.match(home, /setTransactionPage\(page=>page\+1\)/);
   assert.match(home, /没有找到匹配备注的流水/);
