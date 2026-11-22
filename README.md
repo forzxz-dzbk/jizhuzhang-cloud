@@ -17,6 +17,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Server-side note search and page navigation across the full ledger history; literal `%`, `_`, and `\` are escaped rather than interpreted as search wildcards.
 - Transaction history shows account, category and linked business order (including transfers/refunds) so each amount can be audited from the list.
 - Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
+- Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.

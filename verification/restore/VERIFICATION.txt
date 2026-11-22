@@ -1,102 +1,31 @@
-Target: src/CloudBackup.tsx; goal: add guarded backup restore.
-Changed branch/function: restoreBackup(file), same-account/version guard, empty-table preflight, confirmation, dependency-ordered inserts, reverse rollback.
-Command/input for all behaviors: node -e "const fs=require('fs');const s=fs.readFileSync(process.argv[1],'utf8'); console.log('RESTORE_AVAILABLE='+s.includes('async function restoreBackup'));console.log('EMPTY_ACCOUNT_GUARD='+s.includes('data?.length'));console.log('CONFIRM_BEFORE_WRITE='+s.includes('window.confirm'));console.log('EXPORT_AVAILABLE='+s.includes('下载完整云端备份'));" <role file path>
-
-BASELINE stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true
+Verification: daily financial summary component
+TARGET: F:\AI\《记祝账》云端记账项目开发\06-云端候选\src\LedgerOverview.tsx
+Changed behavior: LedgerOverview.tsx renders actual daily income/expense/net for selected ledger, using Asia/Shanghai and exact cents; async read state is explicit.
+Baseline checker: node F:\AI\《记祝账》云端记账项目开发\06-云端候选\verification\restore\check-daily-summary.cjs <file>
+BASELINE stdout:
+DAILY_SUMMARY=false
+SHANGHAI_TIMEZONE=true
+CENT_EXACT_HELPER=false
+LOADING_AND_ERROR_STATUS=false
 BASELINE stderr: (empty)
-BASELINE exit status: 0
-BASELINE SHA256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
-
-MODIFIED stdout: RESTORE_AVAILABLE=true | EMPTY_ACCOUNT_GUARD=true | CONFIRM_BEFORE_WRITE=true | EXPORT_AVAILABLE=true
+BASELINE exit: 0
+Baseline SHA256: 7B8B460D4480FCD86F1068CADC05ED368A442312440E0288C644F5C84CF2F446
+MODIFIED stdout:
+DAILY_SUMMARY=true
+SHANGHAI_TIMEZONE=true
+CENT_EXACT_HELPER=true
+LOADING_AND_ERROR_STATUS=true
 MODIFIED stderr: (empty)
-MODIFIED exit status: 0
-MODIFIED SHA256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-
-ROLLBACK stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true
+MODIFIED exit: 0
+Modified SHA256: 86B887B56C87A19E14758A0A83253006653277CAC2A285A4E5DA34849F8838ED
+Rollback: sh ROLLBACK.sh ROLLBACK_TEST.tsx; then node checker ROLLBACK_TEST.tsx
+ROLLBACK stdout:
+DAILY_SUMMARY=false
+SHANGHAI_TIMEZONE=true
+CENT_EXACT_HELPER=false
+LOADING_AND_ERROR_STATUS=false
 ROLLBACK stderr: (empty)
-ROLLBACK exit status: 0
-ROLLBACK SHA256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
-
-Rollback command: sh ROLLBACK.sh <separate copy of MODIFIED_FILE>
-Rollback status: exit 0; restored hash equals baseline SHA256 F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F.
-Build/test evidence: pnpm test (11/11 pass); pnpm test:db (PASS); pnpm build (PASS); pnpm audit --prod (No known vulnerabilities).
-
-Follow-up verification 2026-11-22; same command and input shape as original transaction: node -e <behavior-check> <role copy>.
-BASELINE stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
-MODIFIED stdout: RESTORE_AVAILABLE=true | EMPTY_ACCOUNT_GUARD=true | CONFIRM_BEFORE_WRITE=true | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-ROLLBACK stdout: RESTORE_AVAILABLE=false | EMPTY_ACCOUNT_GUARD=false | CONFIRM_BEFORE_WRITE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: F03E6D781203D4492DF277BB791580691C9B2BCB3DC5DD211F78220A7E524E9F
-ROLLBACK_HASH_MATCHES_BASELINE=True
-Additional checks: Supabase Auth health HTTP 200; pnpm test 12/12; pnpm test:db PASS; pnpm build PASS; pnpm audit --prod no known vulnerabilities; Vercel config parses and Vite SPA build succeeds.
-
-Continuation: reciprocal-FK restore fix; command: node -e <cycle-safe behavior check> <role file>.
-BASELINE stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-MODIFIED stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 77BF425B8B86F2FD11A82ED360C3C2638A7E19BB933B709D3AF3AB8DE87ED3E4
-ROLLBACK stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-ROLLBACK_HASH_MATCHES_BASELINE=True
-Verified new DB test: cycle-safe confirmed-recurring restore staging; pnpm test 13/13; pnpm build PASS; pnpm audit --prod no known vulnerabilities.
-
-Corrected follow-up behavior check. The previous check matcher used the wrong quote style and is superseded; the implementation SQL uses single quotes. Command: node -e <stage helper + table order + upsert check> <role copy>.
-BASELINE stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-MODIFIED stdout: CYCLE_SAFE_RESTORE=true | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 77BF425B8B86F2FD11A82ED360C3C2638A7E19BB933B709D3AF3AB8DE87ED3E4
-ROLLBACK stdout: CYCLE_SAFE_RESTORE=false | EXPORT_AVAILABLE=true; stderr: (empty); exit: 0; sha256: 2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-MODIFIED_EQUALS_CURRENT_SOURCE=True
-
-ROLLBACK_SCRIPT: sh ROLLBACK.sh <separate MODIFIED_FILE copy>
-ROLLBACK behavior was observed in preceding command; exit status 0.
-ROLLBACK_HASH=
-2EA51332DD3F71ABE42FA9A092FFBFCF20F55686C862200DF520AFA3E3D6E02C
-ROLLBACK_HASH_MATCHES_BASELINE=
-True
-
-Corrected evidence append (the prior append command had a PowerShell overload error; behavior commands had completed).
-ROLLBACK stdout: SEARCH_CONTROL=false | SERVER_FILTER=false | PAGINATION=false
-ROLLBACK stderr: (empty); exit status: 0
-BASELINE_SHA256=F65ABC63B706985E9A8A3413079C0BC1AE2ABD4F442BC4C509F11D0E240B406D
-ROLLBACK_SHA256=F65ABC63B706985E9A8A3413079C0BC1AE2ABD4F442BC4C509F11D0E240B406D
-ROLLBACK_HASH_MATCHES_BASELINE=True
-
-Transaction search verification using identical command/input: node -e <search contract check> <role file>.
-BASELINE stdout: SEARCH_CONTROL=false | SERVER_FILTER=false | PAGINATION=false
-BASELINE stderr: (empty); exit status: 0; SHA256: F65ABC63B706985E9A8A3413079C0BC1AE2ABD4F442BC4C509F11D0E240B406D
-MODIFIED stdout: SEARCH_CONTROL=true | SERVER_FILTER=true | PAGINATION=true
-MODIFIED stderr: (empty); exit status: 0; SHA256: 09AFD0AD28688919078D2A81B1A342A5353E77DF496DF9ABE0631BA6B873C4EE
-ROLLBACK stdout: SEARCH_CONTROL=false | SERVER_FILTER=false | PAGINATION=false
-ROLLBACK stderr: (empty); exit status: 0; SHA256: F65ABC63B706985E9A8A3413079C0BC1AE2ABD4F442BC4C509F11D0E240B406D
-ROLLBACK_HASH_MATCHES_BASELINE=True
-
-Continuation: prevent stale transaction-search requests from replacing newer results; command: node -e <async-query contract check> <role file>.
-BASELINE stdout: REQUEST_SEQUENCE_GUARD=false | LOADING_FEEDBACK=false | SEARCH_PAGING=true; stderr: (empty); exit: 0; SHA256: 09AFD0AD28688919078D2A81B1A342A5353E77DF496DF9ABE0631BA6B873C4EE
-MODIFIED stdout: REQUEST_SEQUENCE_GUARD=true | LOADING_FEEDBACK=true | SEARCH_PAGING=true; stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
-ROLLBACK stdout: REQUEST_SEQUENCE_GUARD=false | LOADING_FEEDBACK=false | SEARCH_PAGING=true; stderr: (empty); exit: 0; SHA256: 09AFD0AD28688919078D2A81B1A342A5353E77DF496DF9ABE0631BA6B873C4EE
-ROLLBACK_HASH_MATCHES_BASELINE=True
-
-Continuation: persist account opening balances and show actual per-account balances; command: node -e <account balance contract check> <role file>.
-BASELINE stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | CENTS_BALANCE_MODULE=false; stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
-MODIFIED stdout: OPENING_BALANCE_SAVED=true | ACCOUNT_BALANCE_COMPONENT=true | CENTS_BALANCE_MODULE=false; stderr: (empty); exit: 0; SHA256: 00CB827949B9C0DE52790552973E68B8593D3A7B387F4C1DFD257473107B905E
-ROLLBACK stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | CENTS_BALANCE_MODULE=false; stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
-ROLLBACK_HASH_MATCHES_BASELINE=True
-Unit tests: 16/16 PASS. PGlite migration/financial invariants PASS. Production build PASS. pnpm audit --prod: no known vulnerabilities.
-
-Corrected account-balance behavior matcher. Previous check looked for the calculator import in LedgerHome; the calculator is imported by AccountBalances.tsx, so that particular field was invalid and is superseded.
-Command: node -e <opening-balance/component wiring check> <LedgerHome role file>.
-BASELINE stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | BALANCE_COMPONENT_IMPORTED=false
-BASELINE stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
-MODIFIED stdout: OPENING_BALANCE_SAVED=true | ACCOUNT_BALANCE_COMPONENT=true | BALANCE_COMPONENT_IMPORTED=false
-MODIFIED stderr: (empty); exit: 0; SHA256: 00CB827949B9C0DE52790552973E68B8593D3A7B387F4C1DFD257473107B905E
-ROLLBACK stdout: OPENING_BALANCE_SAVED=false | ACCOUNT_BALANCE_COMPONENT=false | BALANCE_COMPONENT_IMPORTED=false
-ROLLBACK stderr: (empty); exit: 0; SHA256: 3F1A82D66BDD30423D918C6B10E455115F1CDE0D109E0BA97BC931B69630E641
-ROLLBACK_HASH_MATCHES_BASELINE=True
-
-Business-order P0 feature transaction. Check: node -e <RPC/UI integration check> <role copy>.
-BASELINE stdout: BUSINESS_INCOME_RPC=false | BUSINESS_COST_RPC=false | ORDER_STATS_COMPONENT=false; stderr: (empty); exit: 0; SHA256: 00CB827949B9C0DE52790552973E68B8593D3A7B387F4C1DFD257473107B905E
-MODIFIED stdout: BUSINESS_INCOME_RPC=true | BUSINESS_COST_RPC=true | ORDER_STATS_COMPONENT=true; stderr: (empty); exit: 0; SHA256: 9ECA6450313E0BD257F9C437B5099CC60CA47D110F59D21F04F1E6B790859ADF
-ROLLBACK stdout: BUSINESS_INCOME_RPC=false | BUSINESS_COST_RPC=false | ORDER_STATS_COMPONENT=false; stderr: (empty); exit: 0; SHA256: 00CB827949B9C0DE52790552973E68B8593D3A7B387F4C1DFD257473107B905E
-ROLLBACK_HASH_MATCHES_BASELINE=True
-Observed project checks: pnpm test 17/17; pnpm test:db PASS including migrations 0001-0002, RLS, type isolation, idempotent costs, refund-adjusted order surplus; pnpm build PASS; pnpm audit --prod no known vulnerabilities.
-
-Transaction history detail verification; command: node -e <account/category/order display check> <role file>.
-BASELINE stdout: ACCOUNT_CATEGORY_ORDER_DETAIL=false | TRANSFER_DIRECTION_DETAIL=false | HISTORY_RENDER_HAS_SUBDETAIL=false; stderr: (empty); exit: 0; SHA256: 9ECA6450313E0BD257F9C437B5099CC60CA47D110F59D21F04F1E6B790859ADF
-MODIFIED stdout: ACCOUNT_CATEGORY_ORDER_DETAIL=true | TRANSFER_DIRECTION_DETAIL=true | HISTORY_RENDER_HAS_SUBDETAIL=true; stderr: (empty); exit: 0; SHA256: 422975804FFCF830AC623C511C91BB68F4720A6BA538B2D974A064C721481903
-ROLLBACK stdout: ACCOUNT_CATEGORY_ORDER_DETAIL=false | TRANSFER_DIRECTION_DETAIL=false | HISTORY_RENDER_HAS_SUBDETAIL=false; stderr: (empty); exit: 0; SHA256: 9ECA6450313E0BD257F9C437B5099CC60CA47D110F59D21F04F1E6B790859ADF
-ROLLBACK_HASH_MATCHES_BASELINE=True
-Checks: pnpm test 17/17; pnpm test:db pass; pnpm build pass; pnpm audit --prod no known vulnerabilities.
+ROLLBACK exit: 0 (script exit 0)
+Rollback SHA256: 7B8B460D4480FCD86F1068CADC05ED368A442312440E0288C644F5C84CF2F446
+Original SHA256: 7B8B460D4480FCD86F1068CADC05ED368A442312440E0288C644F5C84CF2F446
+Restored hash matches original: True
