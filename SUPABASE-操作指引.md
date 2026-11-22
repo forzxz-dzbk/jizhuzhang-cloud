@@ -10,9 +10,9 @@
 
 - `0001_cloud_foundation.sql`：核心架构曾成功执行；绝不要重跑。
 - `0002_business_order_costs_and_types.sql`：已在新建的空白 SQL 查询中执行并返回 `Success. No rows returned`；只读核验已确认新增列、视图、两个业务 RPC 和业务订单 RLS。早先 `42601` 错误来自旧查询内容。
-- `0003_daily_goal_by_received_date.sql`：你刚报告在 SQL Editor 得到 `Success. No rows returned`，按已执行记录；独立 schema 核验仍待完成。该修正令 ¥500 目标按收入流水实际到账日 `transactions.occurred_on` 统计，而非业务订单创建日；退款仍按实际退款日扣减。**不要盲目重跑 0003**。
+- `0003_daily_goal_by_received_date.sql`：你刚报告在 SQL Editor 得到 `Success. No rows returned`，按已执行记录；随后已完成独立只读 schema 核验：只返回 revenue_date 和 security_invoker=true，过滤条件未发现 order_date。该修正令 ¥500 目标按收入流水实际到账日 `transactions.occurred_on` 统计，而非业务订单创建日；退款仍按实际退款日扣减。**不要盲目重跑 0003**。
 
-## 先完成业务订单迁移，再完成到账日期修正
+## Hosted 迁移状态已完成
 
 当前 SQL Editor 会话曾重复显示旧查询错误（`LINE 3: begin;`），并且计算机控制工具后来因无法验证页面 URL 停止。不要把旧结果当成新迁移成功，也不要重复运行 `0001`。待能够使用该项目的 SQL Editor 时，为每个迁移分别新建独立查询、粘贴对应文件的完整内容、确认 SQL 编辑器显示的内容确实已替换，再执行并独立检查结果。
 
