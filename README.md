@@ -29,7 +29,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 
 ## Not yet production-accepted
 
-- Formal public deployment URL is pending GitHub Pages setup. Source is pushed to the public GitHub repository; Vercel is not required.
+- Formal public deployment is live at https://forzxz-dzbk.github.io/jizhuzhang-cloud/ (HTTP 200 verified).
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
