@@ -11,6 +11,10 @@ test('GitHub Pages deployment is configured for Vite and environment template is
   assert.ok(workflow.includes('actions/deploy-pages@v4'));
   assert.ok(workflow.includes('VITE_SUPABASE_URL'));
   assert.ok(workflow.includes('VITE_SUPABASE_PUBLISHABLE_KEY'));
+  assert.ok(workflow.includes('Set repository variable VITE_SUPABASE_URL'));
+  assert.ok(workflow.includes('Set repository variable VITE_SUPABASE_PUBLISHABLE_KEY'));
+  assert.ok(workflow.includes('needs: build'));
+  assert.ok(workflow.includes('artifact_name: github-pages'));
   assert.ok(workflow.includes('pnpm build'));
   assert.match(env, /VITE_SUPABASE_URL=https:\/\/your-project\.supabase\.co/);
   assert.match(env, /VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key/);

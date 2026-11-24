@@ -15,10 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +26,14 @@ jobs:
         run: npm install --global pnpm@10
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Validate public Supabase configuration
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || { echo "::error::Set repository variable VITE_SUPABASE_URL"; exit 1; }
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || { echo "::error::Set repository variable VITE_SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          case "$VITE_SUPABASE_PUBLISHABLE_KEY" in sb_publishable_*) ;; *) echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY must be a Supabase publishable key"; exit 1;; esac
       - name: Build site
         env:
           GITHUB_PAGES: 'true'
@@ -38,7 +43,18 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
+          name: github-pages
           path: dist
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
