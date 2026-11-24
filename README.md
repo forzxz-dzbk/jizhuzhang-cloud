@@ -2,7 +2,7 @@
 
 React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and Realtime. This is the cloud-first candidate intended to replace the local-only MVP; it is not yet a formally deployed production service.
 
-## Current delivery status (2026-11-22)
+## Current delivery status (2026-11-24)
 
 - Supabase project is connected through local `.env.local` using only the browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never add a service-role key to client configuration or source control.
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
@@ -29,14 +29,14 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 
 ## Not yet production-accepted
 
-- Formal public deployment URL and GitHub remote are not configured. The candidate has a local Git repository with committed source, but no GitHub remote, Vercel CLI, or linked Vercel project.
+- Formal public deployment URL is pending GitHub Pages setup. Source is pushed to the public GitHub repository; Vercel is not required.
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
 - Hosted schema verification confirms business_daily_revenue.revenue_date and security_invoker=true; the read-only query found no order_date output column and did not read financial rows. Never rerun 0001 or 0003.
 - Supabase email-confirmation and password-recovery redirect settings must be checked for the final deployment URL.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
-- Local Git is on `main`; `.env.local` is ignored and was not included. No GitHub remote, GitHub CLI, Vercel CLI, or deployment token is available in this workspace.
+- Local Git is on `main`; `.env.local` is ignored and was not included. GitHub Pages workflow is configured; repository Pages source and Actions variables still need owner setup.
 
 ## Local setup and checks
 
@@ -51,16 +51,15 @@ Requirements: Node.js 20+ and pnpm.
 
 GitHub Actions runs the same core test, isolated migration, production build, and production dependency audit on pushes and pull requests to `main`.
 
-## Deployment preparation (Vercel)
+## Deployment (GitHub Pages)
 
-`vercel.json` sets the Vite build/output and SPA history fallback. The candidate has not been deployed because it has no GitHub remote or linked Vercel project yet.
+The repository is public and GitHub Pages publishes only the frontend bundle; user data remains in Supabase behind Auth and owner-scoped RLS. The workflow `.github/workflows/deploy-pages.yml` builds and publishes on every push to `main`.
 
-1. Push this folder to a new private GitHub repository (do not include `.env.local`; it is ignored).
-2. Import that repository in Vercel; keep the project root at this folder. Build settings are in `vercel.json` (`pnpm build`, output `dist`).
-3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` as Vercel environment variables for Production and Preview. Use the Supabase project's URL and browser-safe Publishable key only; never add `service_role` or database passwords.
-4. Deploy, then in Supabase Auth set the deployed origin as Site URL and add the exact deployed URL plus its password-recovery redirect URL to the redirect allowlist.
+1. In repository Settings → Pages, select **GitHub Actions** as the source.
+2. In Settings → Secrets and variables → Actions → Variables, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. These are browser-public settings; never use a `service_role` key or database password.
+3. Push to `main` or manually run **Deploy GitHub Pages** in Actions. The site URL is `https://forzxz-dzbk.github.io/jizhuzhang-cloud/`.
+4. In Supabase Auth URL Configuration, set that exact URL as the Site URL and add it to Redirect URLs. Email confirmation is enabled, so test confirmation and recovery links after configuration.
 5. Verify sign-in, password recovery, ledger reads/writes, backup download and second-device sync before entering real financial data.
-
 ## Supabase migration safety
 
 The current live project already contains the core schema. The initial migration is non-idempotent and must not be replayed. Before changing hosted schema, inspect current state and prepare a targeted, additive migration. Realtime setup is separately represented by `supabase/operations/enable-realtime.sql`.

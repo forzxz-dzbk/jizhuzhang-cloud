@@ -9,6 +9,9 @@ const env = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
 test('auth gate supports sign-in, sign-up, password recovery and sign-out', () => {
   for (const marker of ['signInWithPassword', 'signUp(', 'resetPasswordForEmail', 'signOut()']) assert.ok(ui.includes(marker), marker);
 });
+test('password recovery token opens a new-password flow and persists the update', () => {
+  for (const marker of ["event === 'PASSWORD_RECOVERY'", "setMode('recovery_password')", "mode === 'recovery_password'", 'updateUser({ password })', '设置新密码', "session && mode !== 'recovery_password'"]) assert.ok(ui.includes(marker), marker);
+});
 test('auth state is restored and listener is unsubscribed', () => {
   assert.ok(ui.includes('getSession()'));
   assert.ok(ui.includes('onAuthStateChange'));
