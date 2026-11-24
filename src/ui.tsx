@@ -35,8 +35,11 @@ export function AuthGate() {
     setBusy(true);
     try {
       const normalizedEmail = email.trim();
+      // GitHub Pages serves this app below the repository path. Authentication
+      // links must return to that base path, not the GitHub Pages domain root.
+      const authRedirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
       if (mode === 'recovery') {
-        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail);
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: authRedirectTo });
         if (error) throw error;
         setMessage('如该邮箱已注册，请查收密码重置邮件。');
       } else if (mode === 'recovery_password') {
@@ -50,7 +53,7 @@ export function AuthGate() {
           setMessage('密码已更新，请使用新密码登录。');
         }
       } else if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({ email: normalizedEmail, password });
+        const { data, error } = await supabase.auth.signUp({ email: normalizedEmail, password, options: { emailRedirectTo: authRedirectTo } });
         if (error) throw error;
         setMessage(data.session ? '账户已创建并登录。' : '账户创建请求已提交；如需邮箱验证，请检查收件箱。');
       } else {
@@ -70,6 +73,25 @@ export function AuthGate() {
     setBusy(false);
   }
 
+  async function resendConfirmation() {
+    setMessage('');
+    if (!supabase) { setMessage(configurationError); return; }
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) { setMessage('请先填写邮箱。'); return; }
+    setBusy(true);
+    try {
+      const authRedirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: normalizedEmail,
+        options: { emailRedirectTo: authRedirectTo },
+      });
+      if (error) throw error;
+      setMessage('如该邮箱存在待验证账户，请查收新的确认邮件。');
+    } catch (error) { setMessage(error instanceof Error ? error.message : '确认邮件发送失败，请稍后重试。'); }
+    finally { setBusy(false); }
+  }
+
   if (configurationError) return <main className="card"><div className="brand">记祝账</div><h1>云端环境尚未配置</h1><p>{configurationError}</p><p>请在本地 .env.local 配置 Supabase URL 与 anon key。不要将 service role key 放入前端。</p></main>;
   if (session && mode !== 'recovery_password') return <LedgerHome session={session} onSignOut={signOut} />;
 
@@ -84,6 +106,7 @@ export function AuthGate() {
       <button className="link" onClick={()=>{setMode(mode === 'signin' ? 'signup' : 'signin');setMessage('');}}>{mode === 'signin' ? '创建账户' : '返回登录'}</button>
       {mode !== 'recovery' && mode !== 'recovery_password' && <button className="link" onClick={()=>{setMode('recovery');setMessage('');}}>忘记密码？</button>}
     </nav>
+    {mode === 'signup' && <button className="link" type="button" disabled={busy} onClick={()=>void resendConfirmation()}>重新发送确认邮件</button>}
     {message && <p role="status">{message}</p>}
   </main>;
 }
