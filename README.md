@@ -34,9 +34,9 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
 - Hosted schema verification confirms business_daily_revenue.revenue_date and security_invoker=true; the read-only query found no order_date output column and did not read financial rows. Never rerun 0001 or 0003.
-- Supabase email-confirmation and password-recovery redirect settings must be checked for the final deployment URL.
+- Sign-up, confirmation resend, and password-reset links now explicitly return to the GitHub Pages repository base path. A fresh confirmation-email request was submitted from the deployed app; inbox delivery and account activation remain pending.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
-- Local Git is on `main`; `.env.local` is ignored and was not included. GitHub Pages workflow is configured; repository Pages source and Actions variables still need owner setup.
+- GitHub Pages is configured and the latest deployment is green; `.env.local` is ignored and is not published.
 
 ## Local setup and checks
 
