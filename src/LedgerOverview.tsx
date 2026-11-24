@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { formatCents, sumMonthlyRows, summarizeDay } from './daily-finance.mjs';
+import { AnnualReport } from './AnnualReport';
 
 type Row = { occurred_on: string; income: number | string; expense: number | string };
 const shanghaiToday = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date());
@@ -34,5 +35,6 @@ export function LedgerOverview({ledgerId}:{ledgerId:string}){
       <article><span>本月支出 / 退款</span><strong>{formatCents(monthly.expense)}</strong></article>
       <article><span>本月结余</span><strong>{formatCents(monthly.surplus)}</strong></article>
     </section>
+    <AnnualReport ledgerId={ledgerId} />
   </div>;
 }
