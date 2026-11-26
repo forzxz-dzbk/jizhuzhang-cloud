@@ -18,7 +18,16 @@
 - 页面提示已提交但邮箱无信：通用提示不是送达回执；查看 Supabase Auth 日志和 SMTP 供应商发送记录。
 - `otp_expired`：旧链接已过期，只重发一次并使用最新邮件。
 
+## 从 Supabase 日志定位（不要连续点重发）
+1. 登录 Supabase Dashboard，打开「记祝账」项目 → **Logs / Logs Explorer**，选择 **Auth logs**，把时间范围设为最近 1 小时，查找 `signup`、`resend`、`email`、`smtp` 或错误码。
+2. 若日志显示限流或 SMTP 连接/认证错误，先修 SMTP 配置；不要关闭邮箱确认来规避问题。
+3. 若 Auth 日志显示已交给邮件服务且没有错误，到发件平台查投递事件、退信/抑制列表和收件人地址；Supabase 交接后无法保证邮件进入收件箱。
+4. 重发只做一次并记录页面的错误码/时间；若成功提示但仍无邮件，同时查垃圾箱、QQ 邮箱拦截/黑名单。
+
+**当前项目线上配置尚待核实**：页面提示“请求已提交”不能证明 SMTP 已启用，也不能证明邮件已送达。先看日志再决定修复还是换发件服务，不要反复发送造成限流。
+
 参考：
 - Supabase SMTP：https://supabase.com/docs/guides/auth/auth-smtp
 - Supabase 限额：https://supabase.com/docs/guides/auth/rate-limits
+- Supabase 未收到 Auth 邮件排障：https://supabase.com/kb/troubleshooting/not-receiving-auth-emails-from-the-supabase-project-OFSNzw
 - QQ 授权码：https://consumer.huawei.com/cn/support/content/zh-cn16108643/
