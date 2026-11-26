@@ -1,0 +1,53 @@
+TARGET=F:\AI\《记祝账》云端记账项目开发\06-云端候选\SUPABASE-邮件投递配置.md
+BASELINE_COMMAND=node check-guide.mjs TRANSACTION_TEST.md
+BASELINE_STDOUT={"exists":false,"qqSmtp":false,"port465":false,"customSmtp":false,"secretWarning":false}
+BASELINE_STDERR=(empty)
+BASELINE_EXIT=0
+MODIFIED_COMMAND=node check-guide.mjs TRANSACTION_TEST.md
+MODIFIED_STDOUT={"exists":true,"qqSmtp":true,"port465":true,"customSmtp":true,"secretWarning":false}
+MODIFIED_STDERR=(empty)
+MODIFIED_EXIT=1
+ROLLBACK_SCRIPT=sh ROLLBACK.sh ROLLBACK_TEST.md
+ROLLBACK_SCRIPT_RESULT=not executable here: no sh/bash found in PATH
+ROLLBACK_EQUIVALENT_COMMAND=node restore-test-copy.mjs ROLLBACK_TEST.md
+ROLLBACK_STDOUT=RESTORED_ABSENT=true ; checker={"exists":false,"qqSmtp":false,"port465":false,"customSmtp":false,"secretWarning":false}
+ROLLBACK_STDERR=(empty)
+ROLLBACK_EXIT=0; checker_exit=0
+BASELINE_STATE=target did not exist before; absent-file hash=not applicable
+MODIFIED_FILE_SHA256=CAB395D42BCB62B221BFA401171C93EF75B75E7A74A18CB5AFFE0FA6532AFAF5
+PROJECT_TARGET_SHA256=CAB395D42BCB62B221BFA401171C93EF75B75E7A74A18CB5AFFE0FA6532AFAF5
+ROLLBACK_TEST_STATE=absent (same as baseline)
+DIFF_GENERATION_EXIT=1 (1 expected for added file)
+CHANGED_ARTIFACT=SUPABASE-邮件投递配置.md added
+ROLLBACK_SCRIPT=F:\AI\《记祝账》云端记账项目开发\06-云端候选\verification\email-delivery-guide\ROLLBACK.sh
+BASELINE_COMMAND=node check-guide.mjs TRANSACTION_TEST.md
+BASELINE_STDOUT={"exists":true,"qqSmtp":true,"port465":true,"customSmtp":true,"noCodeShare":true}
+BASELINE_STDERR=(empty)
+BASELINE_EXIT=0
+MODIFIED_COMMAND=node check-guide.mjs TRANSACTION_TEST.md
+MODIFIED_STDOUT={"exists":true,"qqSmtp":true,"port465":true,"customSmtp":true,"noCodeShare":true}
+MODIFIED_STDERR=(empty)
+MODIFIED_EXIT=0
+ROLLBACK_SCRIPT=not directly executable: sh/bash unavailable
+ROLLBACK_EQUIVALENT=node restore-test-copy.mjs ROLLBACK_TEST.md
+ROLLBACK_STDOUT=RESTORED_ABSENT=true ; checker={"exists":false,"qqSmtp":false,"port465":false,"customSmtp":false,"noCodeShare":false}
+ROLLBACK_STDERR=(empty)
+ROLLBACK_EXIT=0; checker_exit=0
+MODIFIED_FILE_SHA256=CAB395D42BCB62B221BFA401171C93EF75B75E7A74A18CB5AFFE0FA6532AFAF5
+TARGET_SHA256=CAB395D42BCB62B221BFA401171C93EF75B75E7A74A18CB5AFFE0FA6532AFAF5
+ROLLBACK_STATE=absent; matches original absent-target state
+CHANGED_ARTIFACT=added SUPABASE-邮件投递配置.md
+CORRECTED_RUN_BASELINE_COMMAND=node check-guide.mjs TXN_VERIFY_20261124.md
+CORRECTED_RUN_BASELINE_STDOUT={"exists":false,"qqSmtp":false,"port465":false,"customSmtp":false,"noCodeShare":false}
+CORRECTED_RUN_BASELINE_STDERR=(empty)
+CORRECTED_RUN_BASELINE_EXIT=0
+CORRECTED_RUN_MODIFIED_COMMAND=node check-guide.mjs TXN_VERIFY_20261124.md
+CORRECTED_RUN_MODIFIED_STDOUT={"exists":true,"qqSmtp":true,"port465":true,"customSmtp":true,"noCodeShare":true}
+CORRECTED_RUN_MODIFIED_STDERR=(empty)
+CORRECTED_RUN_MODIFIED_EXIT=0
+CORRECTED_RUN_ROLLBACK_SCRIPT_ATTEMPT=not run; sh/bash unavailable
+CORRECTED_RUN_ROLLBACK_EQUIVALENT=node restore-test-copy.mjs ROLLBACK_TEST_20261124.md
+CORRECTED_RUN_ROLLBACK_STDOUT=RESTORED_ABSENT=true ; checker={"exists":false,"qqSmtp":false,"port465":false,"customSmtp":false,"noCodeShare":false}
+CORRECTED_RUN_ROLLBACK_STDERR=(empty)
+CORRECTED_RUN_ROLLBACK_EXIT=0; checker_exit=0
+CORRECTED_RUN_ROLLBACK_STATE=absent, matching baseline

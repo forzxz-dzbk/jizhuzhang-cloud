@@ -1,0 +1,68 @@
+TARGET=F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\check-mainland-network.ps1
+BASELINE_COMMAND=node check-probe.mjs TRANSACTION_TEST.ps1
+BASELINE_STDOUT={"exists":false,"proxyBypass":false,"authProbe":false,"secretSafe":false}
+BASELINE_STDERR=(empty)
+BASELINE_EXIT=0
+MODIFIED_COMMAND=node check-probe.mjs TRANSACTION_TEST.ps1
+MODIFIED_STDOUT={"exists":true,"proxyBypass":true,"authProbe":true,"secretSafe":true}
+MODIFIED_STDERR=(empty)
+MODIFIED_EXIT=0
+ROLLBACK_SCRIPT=not directly executed (no sh/bash); equivalent=node restore-copy.mjs ROLLBACK_TEST.ps1
+ROLLBACK_STDOUT=RESTORED_ABSENT=true ; checker={"exists":false,"proxyBypass":false,"authProbe":false,"secretSafe":false}
+ROLLBACK_STDERR=(empty)
+ROLLBACK_EXIT=0; checker_exit=0
+NETWORK_COMMAND=powershell -File scripts/check-mainland-network.ps1
+NETWORK_STDOUT={
+  "proxyBypassed": true,
+  "testedAt": "2026-11-26T10:26:03.1991788+08:00",
+  "results": [
+    {
+      "target": "frontend",
+      "host": "forzxz-dzbk.github.io",
+      "dns": "185.199.108.153,185.199.109.153,185.199.110.153,185.199.111.153",
+      "tcp443": true,
+      "httpStatus": 200,
+      "error": null
+    },
+    {
+      "target": "supabase-auth",
+      "host": "eexsbypxhkfxqazwqgdq.supabase.co",
+      "dns": "172.64.149.246,104.18.38.10",
+      "tcp443": true,
+      "httpStatus": 200,
+      "error": null
+    }
+  ]
+}
+NETWORK_EXIT=1
+CHANGED_SYMBOL=probe script; checks direct DNS/TCP/HTTPS for frontend and Supabase auth without proxy or key output
+BASELINE_STATE=probe file absent
+ROLLBACK_STATE=copy absent, matching baseline
+DIFF_GENERATION_EXIT=1 (1 expected)
+ROLLBACK_SCRIPT_PATH=F:\AI\《记祝账》云端记账项目开发\06-云端候选\verification\mainland-network-probe\ROLLBACK.sh
+CORRECTION: previous NETWORK_EXIT used stale LASTEXITCODE after a PowerShell script; corrected status is PowerShell success flag.
+CORRECTED_NETWORK_COMMAND=powershell -File scripts/check-mainland-network.ps1
+CORRECTED_NETWORK_STDOUT={
+  "proxyBypassed": true,
+  "testedAt": "2026-11-26T10:26:42.7867388+08:00",
+  "results": [
+    {
+      "target": "frontend",
+      "host": "forzxz-dzbk.github.io",
+      "dns": "185.199.108.153,185.199.109.153,185.199.110.153,185.199.111.153",
+      "tcp443": true,
+      "httpStatus": 200,
+      "error": null
+    },
+    {
+      "target": "supabase-auth",
+      "host": "eexsbypxhkfxqazwqgdq.supabase.co",
+      "dns": "172.64.149.246,104.18.38.10",
+      "tcp443": true,
+      "httpStatus": 200,
+      "error": null
+    }
+  ]
+}
+CORRECTED_NETWORK_STDERR=(empty)
+CORRECTED_NETWORK_SUCCESS=True

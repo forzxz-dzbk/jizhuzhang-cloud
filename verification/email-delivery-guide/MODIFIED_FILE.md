@@ -1,0 +1,24 @@
+# 记祝账：Supabase 邮件投递配置
+
+## 当前现象
+记祝账的 Supabase Auth 已启用邮箱确认。Supabase 默认邮件服务仅向 Supabase 组织成员邮箱发送，且整个项目默认每小时最多发送 2 封。收到“已提交重发”不等于邮件已送达。
+
+## 用 QQ 邮箱配置自定义 SMTP
+> 授权码只输入 QQ 邮箱和 Supabase 控制台。不要发到聊天、截图或代码仓库；不要使用 QQ 登录密码。
+
+1. QQ 邮箱网页端 → 设置 → 账户，开启 SMTP（服务项可能显示为 IMAP/SMTP），生成第三方客户端授权码。
+2. Supabase Dashboard 选择“记祝账”项目 → Authentication → SMTP Settings，启用自定义 SMTP。
+3. 发件人名称：记祝账；发件人邮箱：同一个 QQ 邮箱；SMTP 主机：`smtp.qq.com`；端口：`465`；安全连接：SSL/TLS；用户名：完整 QQ 邮箱；密码：刚生成的授权码。
+4. 保存设置。保留回跳 URL：`https://forzxz-dzbk.github.io/jizhuzhang-cloud/`。不要修改数据库迁移、RLS 或账本数据。
+5. 回到记祝账“创建账户”页，只重发一次确认邮件；检查垃圾邮件，只用最新邮件里的链接。
+
+## 故障判断
+- `over_email_send_rate_limit` / `email rate limit exceeded`：发送频率超限；默认服务每项目目前 2 封/小时，自定义 SMTP 也可能受供应商限额约束。
+- `email_address_not_authorized`：默认服务不向该邮箱发送；配置自定义 SMTP 后再试。
+- 页面提示已提交但邮箱无信：通用提示不是送达回执；查看 Supabase Auth 日志和 SMTP 供应商发送记录。
+- `otp_expired`：旧链接已过期，只重发一次并使用最新邮件。
+
+参考：
+- Supabase SMTP：https://supabase.com/docs/guides/auth/auth-smtp
+- Supabase 限额：https://supabase.com/docs/guides/auth/rate-limits
+- QQ 授权码：https://consumer.huawei.com/cn/support/content/zh-cn16108643/
