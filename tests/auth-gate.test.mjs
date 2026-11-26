@@ -19,7 +19,10 @@ test('expired signup confirmations can be resent to the deployed app base path',
   assert.match(ui, /supabase\.auth\.resend\(\{/);
   assert.match(ui, /type: 'signup'/);
   assert.match(ui, /mode === 'signup'.*重新发送确认邮件/s);
-  assert.match(ui, /如该邮箱存在待验证账户，请查收新的确认邮件/);
+  assert.match(ui, /请求已提交给认证服务，但这不代表邮件已送达/);
+  assert.match(ui, /不要连续重发/);
+  assert.match(ui, /formatAuthError\(error,/);
+  assert.match(ui, /authError\.code/);
 });
 test('password recovery token opens a new-password flow and persists the update', () => {
   for (const marker of ["event === 'PASSWORD_RECOVERY'", "setMode('recovery_password')", "mode === 'recovery_password'", 'updateUser({ password })', '设置新密码', "session && mode !== 'recovery_password'"]) assert.ok(ui.includes(marker), marker);

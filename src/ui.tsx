@@ -5,6 +5,13 @@ import { LedgerHome } from './LedgerHome';
 
 type Mode = 'signin' | 'signup' | 'recovery' | 'recovery_password';
 
+function formatAuthError(error: unknown, fallback: string) {
+  if (!error || typeof error !== 'object') return fallback;
+  const authError = error as { message?: unknown; code?: unknown };
+  const message = typeof authError.message === 'string' ? authError.message : fallback;
+  return typeof authError.code === 'string' ? `${message}（${authError.code}）` : message;
+}
+
 export function AuthGate() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,7 +68,7 @@ export function AuthGate() {
         if (error) throw error;
         setMessage('登录成功。云端数据访问仍须由数据库 RLS 策略保护。');
       }
-    } catch (error) { setMessage(error instanceof Error ? error.message : '认证操作失败，请稍后重试。'); }
+    } catch (error) { setMessage(formatAuthError(error, '认证操作失败，请稍后重试。')); }
     finally { setBusy(false); }
   }
 
@@ -87,8 +94,8 @@ export function AuthGate() {
         options: { emailRedirectTo: authRedirectTo },
       });
       if (error) throw error;
-      setMessage('如该邮箱存在待验证账户，请查收新的确认邮件。');
-    } catch (error) { setMessage(error instanceof Error ? error.message : '确认邮件发送失败，请稍后重试。'); }
+      setMessage('请求已提交给认证服务，但这不代表邮件已送达。请检查收件箱和垃圾邮件；未收到时不要连续重发。');
+    } catch (error) { setMessage(formatAuthError(error, '确认邮件发送失败，请稍后重试。')); }
     finally { setBusy(false); }
   }
 
