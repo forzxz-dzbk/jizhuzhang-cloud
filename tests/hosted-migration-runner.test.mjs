@@ -76,11 +76,13 @@ test('hosted 0006 goal migration command targets only the pinned project and ver
   assert.match(goalRunner, /has_business_type/);
   assert.doesNotMatch(goalRunner, /0001_cloud_foundation\.sql|0002_business_order_costs_and_types\.sql|0003_daily_goal_by_received_date\.sql|0004_savings_goals\.sql|0005_shanghai_entry_time_optional_business_fields\.sql/);
   assert.equal(goalLauncher.charCodeAt(0), 0xfeff, 'UTF-8 BOM keeps Windows PowerShell 5.1 Chinese strings parseable');
-  assert.match(goalLauncher, /Get-Clipboard -Raw/);
+  assert.match(goalLauncher, /postgres\.eexsbypxhkfxqazwqgdq/);
+  assert.match(goalLauncher, /aws-1-ap-southeast-1\.pooler\.supabase\.com:5432\/postgres/);
   assert.match(goalLauncher, /apply-hosted-0006\.mjs/);
   assert.match(goalLauncher, /当前的 Database Password.*-AsSecureString/);
   assert.match(goalLauncher, /EscapeDataString\(\$plainPassword\)/);
   assert.match(goalLauncher, /ZeroFreeBSTR\(\$passwordPointer\)/);
+  assert.doesNotMatch(goalLauncher, /Get-Clipboard|Read-Host .*Pooler URI/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
 });

@@ -11,25 +11,14 @@ if (-not $nodePath) {
 if (-not $nodePath) {
     throw '未找到 Node.js。请使用已安装 Node.js 的 PowerShell 窗口；尚未读取数据库连接 URI。'
 }
-$connectionString = Get-Clipboard -Raw
-if ([string]::IsNullOrWhiteSpace($connectionString)) {
-    throw '剪贴板为空。请复制「记祝账」项目的 Session pooler URI，再运行；未连接数据库。'
-}
-$connectionString = $connectionString.Trim()
-if (-not $connectionString.StartsWith('postgres://') -and -not $connectionString.StartsWith('postgresql://')) {
-    throw '剪贴板中未检测到 PostgreSQL 连接串。请复制「记祝账」项目的 Session pooler URI，再重新运行；未连接数据库。'
-}
 $securePassword = Read-Host '请输入「记祝账」项目当前的 Database Password（输入不显示，不要发到聊天）' -AsSecureString
 $passwordPointer = [IntPtr]::Zero
 $plainPassword = $null
 try {
     $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
     $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-    $parsedUri = [Uri]$connectionString
-    $encodedUsername = $parsedUri.UserInfo.Split(':')[0]
-    $afterAuthority = $connectionString.Substring($connectionString.IndexOf('@') + 1)
     $encodedPassword = [Uri]::EscapeDataString($plainPassword)
-    $connectionString = '{0}://{1}:{2}@{3}' -f $parsedUri.Scheme, $encodedUsername, $encodedPassword, $afterAuthority
+    $connectionString = 'postgresql://postgres.eexsbypxhkfxqazwqgdq:{0}@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres' -f $encodedPassword
 }
 finally {
     if ($passwordPointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
