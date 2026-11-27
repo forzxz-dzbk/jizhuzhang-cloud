@@ -4,6 +4,7 @@ dist/
 .vercel/
 supabase/.temp/
 supabase/server-ca.crt
+supabase/prod-ca-2021.crt
 coverage/
 *.tsbuildinfo
 .env.*

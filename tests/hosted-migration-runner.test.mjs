@@ -56,5 +56,6 @@ test('hosted 0004 launcher reads only a copied PostgreSQL URI and clears it afte
   assert.match(savingsLauncher, /JZZ_SUPABASE_POOLER_URL/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
   assert.match(savingsLauncher, /supabase\\server-ca\.crt/);
+  assert.match(savingsLauncher, /supabase\\prod-ca-2021\.crt/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
 });

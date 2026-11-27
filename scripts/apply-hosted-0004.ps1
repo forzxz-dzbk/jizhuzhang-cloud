@@ -23,9 +23,10 @@ $exitCode = 0
 try {
     $env:JZZ_SUPABASE_POOLER_URL = $connectionString
     $caCertificate = Join-Path $projectRoot 'supabase\server-ca.crt'
-    if (Test-Path -LiteralPath $caCertificate) {
-        $env:JZZ_SUPABASE_CA_CERT_PATH = $caCertificate
+    if (-not (Test-Path -LiteralPath $caCertificate)) {
+        $caCertificate = Join-Path $projectRoot 'supabase\prod-ca-2021.crt'
     }
+    if (Test-Path -LiteralPath $caCertificate) { $env:JZZ_SUPABASE_CA_CERT_PATH = $caCertificate }
     Push-Location $projectRoot
     try { & $nodePath --use-system-ca $runner; $exitCode = $LASTEXITCODE }
     finally {
