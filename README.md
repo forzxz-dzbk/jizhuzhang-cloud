@@ -77,6 +77,8 @@ The additive migration `supabase/migrations/0005_shanghai_entry_time_optional_bu
 
 `supabase/migrations/0006_optional_custom_daily_revenue_goal.sql` adds owner-isolated per-income-ledger goal settings and updates the revenue view to compare actual receipts against the goal effective on each day. A missing setting means the goal is off. The app writes today's effective date only; past effective-date rows are protected by a database trigger. It does not insert financial transactions. Apply only 0006 in the hosted Supabase SQL Editor after confirming 0005 is already present; never replay 0001–0005.
 
+The guarded Windows runner `scripts/apply-hosted-0006.ps1` applies only 0006 to the project whose reference is pinned in the runner, verifies the 0003/0005 prerequisites, uses TLS certificate validation, and checks RLS/history protection afterward without reading financial rows. Copy the **Session Pooler URI** for project “记祝账” to the clipboard, then run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0006.ps1"`. The URI is consumed from clipboard but never printed or written to a file. Never send the URI in chat.
+
 ## Supabase migration safety
 
 The current live project already contains the core schema. The initial migration is non-idempotent and must not be replayed. Before changing hosted schema, inspect current state and prepare a targeted, additive migration. Realtime setup is separately represented by `supabase/operations/enable-realtime.sql`.
