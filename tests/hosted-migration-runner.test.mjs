@@ -42,7 +42,8 @@ test('hosted 0004 runner is project-pinned, additive, idempotent, and verifies o
 test('hosted 0004 launcher accepts the pooler URI only through a hidden prompt and clears it afterward', () => {
   assert.match(savingsLauncher, /Read-Host .* -AsSecureString/);
   assert.match(savingsLauncher, /Get-Command node\.exe/);
-  assert.match(savingsLauncher, /& \$node\.Source \$runner/);
+  assert.match(savingsLauncher, /codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node\.exe/);
+  assert.match(savingsLauncher, /& \$nodePath \$runner/);
   assert.doesNotMatch(savingsLauncher, /pnpm/);
   assert.match(savingsLauncher, /JZZ_SUPABASE_POOLER_URL/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
