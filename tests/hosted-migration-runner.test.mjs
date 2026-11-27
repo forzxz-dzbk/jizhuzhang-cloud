@@ -40,6 +40,7 @@ test('hosted 0004 runner is project-pinned, additive, idempotent, and verifies o
 });
 
 test('hosted 0004 launcher accepts the pooler URI only through a hidden prompt and clears it afterward', () => {
+  assert.equal(savingsLauncher.charCodeAt(0), 0xfeff, 'UTF-8 BOM keeps Windows PowerShell 5.1 Chinese strings parseable');
   assert.match(savingsLauncher, /Read-Host .* -AsSecureString/);
   assert.match(savingsLauncher, /Get-Command node\.exe/);
   assert.match(savingsLauncher, /codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node\.exe/);
