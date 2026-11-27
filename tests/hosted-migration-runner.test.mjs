@@ -6,6 +6,9 @@ const runner = await readFile(new URL('../scripts/apply-hosted-0003.mjs', import
 const launcher = await readFile(new URL('../scripts/apply-hosted-0003.ps1', import.meta.url), 'utf8');
 const savingsRunner = await readFile(new URL('../scripts/apply-hosted-0004.mjs', import.meta.url), 'utf8');
 const savingsLauncher = await readFile(new URL('../scripts/apply-hosted-0004.ps1', import.meta.url), 'utf8');
+const goalRunner = await readFile(new URL('../scripts/apply-hosted-0006.mjs', import.meta.url), 'utf8');
+const goalLauncher = await readFile(new URL('../scripts/apply-hosted-0006.ps1', import.meta.url), 'utf8');
+const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('hosted 0003 runner is pinned to the intended project, pooler and one migration', () => {
   assert.match(runner, /eexsbypxhkfxqazwqgdq/);
@@ -58,4 +61,23 @@ test('hosted 0004 launcher reads only a copied PostgreSQL URI and clears it afte
   assert.match(savingsLauncher, /supabase\\server-ca\.crt/);
   assert.match(savingsLauncher, /supabase\\prod-ca-2021\.crt/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
+});
+
+test('hosted 0006 goal migration command targets only the pinned project and verifies RLS/history safety', () => {
+  assert.match(packageJson.scripts['db:apply-goal-migration'], /apply-hosted-0006\.ps1/);
+  assert.match(goalRunner, /eexsbypxhkfxqazwqgdq/);
+  assert.match(goalRunner, /\.pooler\.supabase\.com/);
+  assert.match(goalRunner, /0006_optional_custom_daily_revenue_goal\.sql/);
+  assert.match(goalRunner, /business_daily_goal_settings_owner_all/);
+  assert.match(goalRunner, /business_daily_goal_settings_history_guard/);
+  assert.match(goalRunner, /rejectUnauthorized: true/);
+  assert.match(goalRunner, /JZZ_SUPABASE_CA_CERT_PATH/);
+  assert.match(goalRunner, /has_revenue_date/);
+  assert.match(goalRunner, /has_business_type/);
+  assert.doesNotMatch(goalRunner, /0001_cloud_foundation\.sql|0002_business_order_costs_and_types\.sql|0003_daily_goal_by_received_date\.sql|0004_savings_goals\.sql|0005_shanghai_entry_time_optional_business_fields\.sql/);
+  assert.equal(goalLauncher.charCodeAt(0), 0xfeff, 'UTF-8 BOM keeps Windows PowerShell 5.1 Chinese strings parseable');
+  assert.match(goalLauncher, /Get-Clipboard -Raw/);
+  assert.match(goalLauncher, /apply-hosted-0006\.mjs/);
+  assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
+  assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
 });
