@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { formatCents, sumMonthlyRows, summarizeDay } from './daily-finance.mjs';
 import { AnnualReport } from './AnnualReport';
+import { shanghaiToday } from './shanghai-time.mjs';
 
 type Row = { occurred_on: string; income: number | string; expense: number | string };
-const shanghaiToday = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date());
-
 export function LedgerOverview({ledgerId}:{ledgerId:string}){
   const [rows,setRows]=useState<Row[]>([]);const [error,setError]=useState('');const [loading,setLoading]=useState(true);
   const [today,setToday]=useState(shanghaiToday);const month=today.slice(0,7);const [year,n]=month.split('-').map(Number);
@@ -15,9 +14,9 @@ export function LedgerOverview({ledgerId}:{ledgerId:string}){
     if(e)setError(`本月概览读取失败：${e.message}`);else setRows((data??[]) as Row[]);setLoading(false);
   },[ledgerId,from,to]);
   useEffect(()=>{const timer=window.setInterval(()=>{const current=shanghaiToday();setToday(value=>value===current?value:current)},60000);return()=>window.clearInterval(timer)},[]);
-  useEffect(()=>{void refresh();const client=supabase;if(!client)return;
-    const channel=client.channel(`overview-${ledgerId}`).on('postgres_changes',{event:'*',schema:'public',table:'transactions',filter:`ledger_id=eq.${ledgerId}`},()=>void refresh()).subscribe();
-    return()=>{void client.removeChannel(channel);};
+  useEffect(()=>{void refresh();const onLocalChange=()=>void refresh();window.addEventListener('jizhuzhang:transactions-changed',onLocalChange);const client=supabase;if(!client)return()=>window.removeEventListener('jizhuzhang:transactions-changed',onLocalChange);
+    const channel=client.channel(`overview-${ledgerId}`).on('postgres_changes',{event:'*',schema:'public',table:'transactions',filter:`ledger_id=eq.${ledgerId}`},onLocalChange).subscribe();
+    return()=>{window.removeEventListener('jizhuzhang:transactions-changed',onLocalChange);void client.removeChannel(channel);};
   },[ledgerId,refresh]);
   const daily=summarizeDay(rows,today);const monthly=sumMonthlyRows(rows);
   return <div className="overview-stack">

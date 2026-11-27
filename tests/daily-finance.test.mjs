@@ -40,7 +40,10 @@ test('annual report reads only the selected ledger and labels empty years honest
 
 test('daily summary is rendered per selected ledger and queries only actual transaction totals', async () => {
   const component = await readFile(new URL('../src/LedgerOverview.tsx', import.meta.url), 'utf8');
-  assert.match(component, /timeZone:'Asia\/Shanghai'/);
+  const calendar = await readFile(new URL('../src/TransactionCalendar.tsx', import.meta.url), 'utf8');
+  const monthCard = await readFile(new URL('../src/LedgerMonthCard.tsx', import.meta.url), 'utf8');
+  const home = await readFile(new URL('../src/LedgerHome.tsx', import.meta.url), 'utf8');
+  assert.match(component, /shanghaiToday/);
   assert.match(component, /eq\('ledger_id',ledgerId\)/);
   assert.match(component, /今日财务小结/);
   assert.match(component, /今日财务小结：收入 − 支出\/退款/);
@@ -48,4 +51,11 @@ test('daily summary is rendered per selected ledger and queries only actual tran
   assert.match(component, /本月支出 \/ 退款/);
   assert.match(component, /当前所选账本统计/);
   assert.match(component, /transaction_totals/);
+  for (const consumer of [component, calendar, monthCard]) {
+    assert.match(consumer, /jizhuzhang:transactions-changed/);
+    assert.match(consumer, /postgres_changes/);
+  }
+  assert.match(home, /dispatchEvent\(new Event\('jizhuzhang:transactions-changed'\)\)/);
+  assert.match(calendar, /shanghaiToday\(\)/);
+  assert.match(monthCard, /shanghaiCurrentMonth/);
 });

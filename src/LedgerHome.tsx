@@ -17,9 +17,9 @@ import { TransactionCalendar } from './TransactionCalendar';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = {
-  id: string; type: string; amount: number; occurred_on: string; created_at: string; note: string;
+  id: string; type: string; amount: number; occurred_on: string; occurred_at: string; created_at: string; note: string;
   account_id: string; transfer_account_id: string | null; category_id: string | null;
-  business_order_id: string | null; refund_order_id: string | null; cost_order_id: string | null;
+  business_order_id: string | null; refund_order_id: string | null; cost_order_id: string | null; recurring_instance_id: string | null;
 };
 type Account = { id: string; name: string; opening_balance: number | string };
 type Category = { id: string; name: string; flow: 'income' | 'expense' };
@@ -52,6 +52,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   const [activeTab,setActiveTab]=useState<'ledger'|'assets'|'stats'>('ledger');
   const [entryOpen,setEntryOpen]=useState(false);
   const [selectedCategoryId,setSelectedCategoryId]=useState('');
+  const [editingTransaction,setEditingTransaction]=useState<Transaction|null>(null);
 
   const loadLedgers = useCallback(async () => {
     if (!supabase) return;
@@ -82,7 +83,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if(!client||!selected){setTransactions([]);setHasMoreTransactions(false);setTransactionsLoading(false);return;}
     setTransactionsLoading(true);
     try {
-      let request=client.from('transactions').select('id,type,amount,occurred_on,created_at,note,account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id')
+      let request=client.from('transactions').select('id,type,amount,occurred_on,occurred_at,created_at,note,account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id,recurring_instance_id')
         .eq('ledger_id',selected).order('occurred_on',{ascending:false});
       if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
       const start=page*TRANSACTION_PAGE_SIZE;
@@ -222,6 +223,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
     else {
       setNotice('流水已保存到云端。');
+      window.dispatchEvent(new Event('jizhuzhang:transactions-changed'));
       setRequestId(createRequestId());
       setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
       await Promise.all([loadOptions(), loadTransactions(0,'')]);
@@ -229,6 +231,75 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     }
     setBusy(false);
   }
+
+  async function updateTransaction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !editingTransaction) return;
+    const form = new FormData(event.currentTarget);
+    const amountText = String(form.get('amount') ?? '').trim();
+    const amount = Number(amountText);
+    const shanghaiLocal = String(form.get('occurred_at') ?? '');
+    const occurredAt = new Date(`${shanghaiLocal}:00+08:00`);
+    if (!amountText || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+      setError('金额必须大于 0，且最多两位小数。'); return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(shanghaiLocal) || !Number.isFinite(occurredAt.getTime())) {
+      setError('请选择有效的北京时间日期和时间。'); return;
+    }
+    const transfer = editingTransaction.type === 'transfer';
+    const category = editingTransaction.type === 'income' || editingTransaction.type === 'expense';
+    const accountId = String(form.get('account') ?? '');
+    const transferAccountId = transfer ? String(form.get('transferAccount') ?? '') : null;
+    if (transfer && accountId === transferAccountId) { setError('转出与转入账户不能相同。'); return; }
+    setBusy(true); setError(''); setNotice('');
+    const { error: saveError } = await supabase.rpc('update_transaction', {
+      p_transaction_id: editingTransaction.id,
+      p_amount: amount,
+      p_occurred_at: occurredAt.toISOString(),
+      p_account_id: accountId,
+      p_category_id: category ? String(form.get('category') ?? '') : null,
+      p_transfer_account_id: transferAccountId,
+      p_note: String(form.get('note') ?? ''),
+    });
+    if (saveError) setError(`修改失败，原流水保持不变：${saveError.message}`);
+    else {
+      setEditingTransaction(null);
+      setNotice('流水已修改并保存到云端；日期、时间按北京时间更新。');
+      window.dispatchEvent(new Event('jizhuzhang:transactions-changed'));
+      await Promise.all([loadTransactions(), loadOptions()]);
+    }
+    setBusy(false);
+  }
+
+  async function deleteTransaction(row: Transaction) {
+    if (!supabase) return;
+    if (!window.confirm('确定删除这笔流水？删除后余额、月度统计和相关目标会同步重算。此操作不能直接撤销。')) return;
+    setBusy(true); setError(''); setNotice('');
+    const { error: deleteError } = await supabase.rpc('delete_transaction', { p_transaction_id: row.id });
+    if (deleteError) setError(`删除失败，流水未删除：${deleteError.message}`);
+    else {
+      if (editingTransaction?.id === row.id) setEditingTransaction(null);
+      setNotice(row.recurring_instance_id ? '流水已删除；对应固定支出已恢复为待确认。' : '流水已删除，余额与统计已更新。');
+      window.dispatchEvent(new Event('jizhuzhang:transactions-changed'));
+      await Promise.all([loadTransactions(), loadOptions()]);
+    }
+    setBusy(false);
+  }
+
+  const formatShanghaiInput = (timestamp: string) => {
+    const date = new Date(timestamp);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  };
+
+  const renderTransactionRows = (rows: Transaction[]) => <ul className="transaction-list">{rows.map(row => {
+    const detail = transactionDetails(row);
+    return <li key={row.id}>
+      <span className="transaction-copy"><span>{formatShanghaiTimestamp(row.occurred_at)} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span>
+      <strong className={row.type==='expense'||row.type==='refund'?'amount-expense':'amount-income'}>{row.type==='transfer'?'↔ ':row.type==='expense'||row.type==='refund'?'−':'+'}¥{Number(row.amount).toFixed(2)}</strong>
+      <span className="transaction-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>{setError('');setEditingTransaction(row);}}>修改</button><button type="button" className="secondary delete-transaction" disabled={busy} onClick={()=>void deleteTransaction(row)}>删除</button></span>
+    </li>;
+  })}</ul>;
 
   const active = ledgers.find(row => row.id === selected);
   const displayName = (row: Ledger) => row.kind === 'personal' ? '支出' : '收入';
@@ -260,7 +331,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
           <label className="quick-search">搜索备注<input type="search" aria-label="搜索备注" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="搜索流水"/></label>
           {transactionsLoading && <p role="status">正在加载云端流水…</p>}
           {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : '本月暂时没有流水，点击右下角 + 开始记账。'}</p>}
-          {transactions.length > 0 && <ul className="transaction-list">{transactions.slice(0, 8).map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong className={row.type==='expense'||row.type==='refund'?'amount-expense':'amount-income'}>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+          {transactions.length > 0 && renderTransactionRows(transactions.slice(0, 8))}
           {transactions.length > 8 && <button className="secondary" onClick={() => setActiveTab('stats')}>查看全部流水</button>}
         </section>
       </>}
@@ -268,7 +339,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
         <form className="asset-create-form" onSubmit={createAccount}><h2>新增账户</h2><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><label>期初余额（CNY）<input name="opening_balance" type="number" step="0.01" required defaultValue="0"/></label><small>负数可用于记录信用卡等负债。</small><button disabled={busy}>保存账户</button></form>
         <form className="asset-create-form" onSubmit={e=>void createCategory(e, categoryFlow)}><h2>添加自定义分类</h2><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="内置分类已准备好，也可自定义"/><button disabled={busy}>保存分类</button></form>
         <AccountBalances ledgerId={active.id} accounts={accounts}/>
-        <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{setTransactionSearch('');setSearchQuery('');setTransactionPage(0);await loadTransactions(0,'');}} />
+        <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{window.dispatchEvent(new Event('jizhuzhang:transactions-changed'));setTransactionSearch('');setSearchQuery('');setTransactionPage(0);await loadTransactions(0,'');}} />
         <CloudBackup session={session} />
       </section>}
       {active && activeTab === 'stats' && <>
@@ -278,7 +349,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
         {active.kind === 'personal' && <SavingsGoals ledgerId={active.id} accounts={accounts}/>}
         <section className="panel all-transactions"><h2>全部流水</h2>
           <div className="transaction-tools"><label>按备注搜索<input type="search" aria-label="全部流水搜索" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="输入关键词查找云端流水"/></label><div className="transaction-pagination"><button className="secondary" disabled={busy||loading||transactionPage===0} onClick={()=>setTransactionPage(page=>Math.max(0,page-1))}>上一页</button><span>第 {transactionPage+1} 页</span><button className="secondary" disabled={busy||loading||!hasMoreTransactions} onClick={()=>setTransactionPage(page=>page+1)}>下一页</button></div></div>
-          {transactions.length>0&&<ul className="transaction-list">{transactions.map(row=>{const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note||detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type==='transfer'?'↔ ':row.type==='expense'||row.type==='refund'?'−':'+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+          {transactions.length>0&&renderTransactionRows(transactions)}
           {transactions.length===0&&!transactionsLoading&&<p className="empty">该账本暂无真实流水。</p>}
         </section>
       </>}
@@ -301,6 +372,19 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
           {accounts.length===0&&<p className="error">还没有账户，请先在“资产”中添加账户。</p>}
           {(entryType==='income'||entryType==='expense')&&categories.filter(item=>item.flow===entryType).length===0&&<p className="error">暂无此类分类，请刷新页面后重试。</p>}
           <button className="save-quick-entry" disabled={busy||accounts.length===0||((entryType==='income'||entryType==='expense')&&(!selectedCategoryId||!categories.some(item=>item.id===selectedCategoryId&&item.flow===entryType)))||(entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存'}</button>
+        </form>
+      </section></div>}
+      {active && editingTransaction && <div className="quick-entry-backdrop edit-transaction-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget&&!busy)setEditingTransaction(null);}}><section className="quick-entry-sheet edit-transaction-sheet" role="dialog" aria-modal="true" aria-labelledby="edit-transaction-title">
+        <form className="quick-entry-form" key={editingTransaction.id} onSubmit={event=>void updateTransaction(event)}>
+          <div className="quick-entry-top"><button type="button" className="close-entry" aria-label="关闭修改" disabled={busy} onClick={()=>setEditingTransaction(null)}>×</button><h2 id="edit-transaction-title">修改{editingTransaction.type==='income'?'收入':editingTransaction.type==='expense'?'支出':editingTransaction.type==='transfer'?'转账':'退款'}</h2><span /></div>
+          <p>修改后将同步重算余额、日历与统计；时间按北京时间保存。</p>
+          <label>金额（CNY）<input name="amount" type="number" min="0.01" step="0.01" required inputMode="decimal" defaultValue={Number(editingTransaction.amount).toFixed(2)} /></label>
+          <label>记账日期和时间（北京时间）<input name="occurred_at" type="datetime-local" step="60" required defaultValue={formatShanghaiInput(editingTransaction.occurred_at)} /></label>
+          <label>账户<select name="account" required defaultValue={editingTransaction.account_id}>{accounts.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          {(editingTransaction.type==='income'||editingTransaction.type==='expense')&&<label>分类<select name="category" required defaultValue={editingTransaction.category_id??''}>{categories.filter(item=>item.flow===editingTransaction.type).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+          {editingTransaction.type==='transfer'&&<label>转入账户<select name="transferAccount" required defaultValue={editingTransaction.transfer_account_id??''}>{accounts.filter(item=>item.id!==editingTransaction.account_id).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+          <label>备注（选填）<input name="note" maxLength={500} defaultValue={editingTransaction.note} /></label>
+          <button className="save-quick-entry" disabled={busy}>{busy?'正在保存…':'保存修改'}</button>
         </form>
       </section></div>}
     </>}

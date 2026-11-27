@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from './supabase';
+import { shanghaiToday } from './shanghai-time.mjs';
 
 type RevenueDay = { revenue_date: string; revenue: number; goal_enabled: boolean; goal_amount: number | null; goal_reached: boolean; has_revenue_record: boolean };
-const todayShanghai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 const shiftMonth = (month: string, delta: number) => {
   const [year, number] = month.split('-').map(Number);
   return new Date(Date.UTC(year, number - 1 + delta, 1)).toISOString().slice(0, 7);
 };
 
 export function RevenueCalendar({ ledgerId }: { ledgerId: string }) {
-  const [month, setMonth] = useState(todayShanghai().slice(0, 7));
+  const [month, setMonth] = useState(() => shanghaiToday().slice(0, 7));
   const [days, setDays] = useState<RevenueDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const today = todayShanghai();
+  const today = shanghaiToday();
   const [goalEnabled, setGoalEnabled] = useState(false);
   const [targetAmount, setTargetAmount] = useState('500');
   const [savingGoal, setSavingGoal] = useState(false);

@@ -29,6 +29,8 @@ try {
   await db.exec(optionalGoalMigration);
   const realtimeGoalMigration = await readFile(new URL('../supabase/migrations/0007_realtime_goal_settings.sql', import.meta.url), 'utf8');
   await db.exec(realtimeGoalMigration);
+  const transactionManagementMigration = await readFile(new URL('../supabase/migrations/0008_edit_delete_transactions.sql', import.meta.url), 'utf8');
+  await db.exec(transactionManagementMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -95,6 +97,24 @@ try {
   const recurring = (await db.query(`insert into public.recurring_expenses(ledger_id,name,amount,due_day)
     values ('${business}','场地固定费',100,31) returning id`)).rows[0].id;
   const expenseCategory=(await db.query(`insert into public.categories(ledger_id,name,flow) values ('${business}','经营成本','expense') returning id`)).rows[0].id;
+  const editableExpense='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  await db.exec(`select public.create_transaction('${editableExpense}','${business}','expense','${account}',12,'2026-11-20','editable expense','${expenseCategory}')`);
+  const originalTimestamp=(await db.query(`select occurred_on::text,occurred_at from public.transactions where id='${editableExpense}'`)).rows[0];
+  assert.equal(originalTimestamp.occurred_on,'2026-11-20','new transaction persists its accounting day');
+  assert.ok(originalTimestamp.occurred_at,'new transaction persists its occurrence timestamp');
+  await db.exec(`select public.update_transaction('${editableExpense}',15,'2026-11-21T08:30:00Z'::timestamptz,'${account}','${expenseCategory}',null,'corrected amount and time')`);
+  const edited=(await db.query(`select amount,occurred_on::text,note from public.transactions where id='${editableExpense}'`)).rows[0];
+  assert.equal(Number(edited.amount),15,'edit changes amount atomically');
+  assert.equal(edited.occurred_on,'2026-11-21','edited instant is converted to the Shanghai accounting date');
+  assert.equal(edited.note,'corrected amount and time','edit updates optional note');
+  assert.equal(Number((await db.query(`select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-11-21'`)).rows[0].expense),15,'edited transaction is included in daily expenses');
+  let invalidEditRejected=false;
+  try { await db.exec(`select public.update_transaction('${editableExpense}',0,'2026-11-21T08:30:00Z'::timestamptz,'${account}','${expenseCategory}',null,'invalid')`); }
+  catch { invalidEditRejected=true; }
+  assert.ok(invalidEditRejected,'invalid edit is rejected');
+  await db.exec(`select public.delete_transaction('${editableExpense}')`);
+  assert.equal((await db.query(`select count(*)::int as n from public.transactions where id='${editableExpense}'`)).rows[0].n,0,'delete removes the selected transaction');
+  assert.equal(Number((await db.query(`select coalesce((select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-11-21'),0) as expense`)).rows[0].expense),0,'delete recalculates the daily expense total');
   const generated1 = await db.query(`select public.generate_recurring_instances('${business}','2026-02-01') as n`);
   const generated2 = await db.query(`select public.generate_recurring_instances('${business}','2026-02-01') as n`);
   assert.equal(generated1.rows[0].n, 1, 'monthly pending instance generated once');
@@ -107,6 +127,10 @@ try {
   await db.exec(`${confirm}; ${confirm};`);
   const actual=(await db.query(`select expense from public.transaction_totals where ledger_id='${business}' and occurred_on='2026-02-28'`)).rows[0];
   assert.equal(Number(actual.expense),105,'only confirmed actual amount is counted once');
+  await db.exec(`select public.delete_transaction('${expenseRequest}')`);
+  const reopened=(await db.query(`select status,transaction_id from public.recurring_expense_instances where id='${instance}'`)).rows[0];
+  assert.equal(reopened.status,'pending','deleting a confirmed recurring expense restores its pending state');
+  assert.equal(reopened.transaction_id,null,'pending recurring instance no longer references the deleted transaction');
 
   const orderIncomeRequest='99999999-9999-4999-8999-999999999991';
   const orderIncome=`select public.create_business_income('${orderIncomeRequest}','${business}','${account}',400,'2026-11-20','','${category}','2026-11-20','代运营项目','内容服务')`;
@@ -157,6 +181,15 @@ try {
   assert.equal(Number(orderStats.actual_revenue),300);
   assert.equal(Number(orderStats.allocated_cost),150);
   assert.equal(Number(orderStats.operating_surplus),150,'order surplus = actual receipts less refunds and allocated costs');
+  const trackedIncomeId=(await db.query(`select id from public.transactions where business_order_id='${trackedOrder}' and type='income'`)).rows[0].id;
+  let refundProtectedIncome=false;
+  try { await db.exec(`select public.update_transaction('${trackedIncomeId}',99,'2026-11-20T08:30:00Z'::timestamptz,'${account}','${category}',null,'too low')`); }
+  catch { refundProtectedIncome=true; }
+  assert.ok(refundProtectedIncome,'income cannot be reduced below already-recorded refunds');
+  let incomeWithRefundsDeleteRejected=false;
+  try { await db.exec(`select public.delete_transaction('${trackedIncomeId}')`); }
+  catch { incomeWithRefundsDeleteRejected=true; }
+  assert.ok(incomeWithRefundsDeleteRejected,'original business income cannot be deleted before linked refunds');
   let businessTypeInPersonalRejected=false;
   try { await db.exec(`select public.create_business_income('99999999-9999-4999-8999-999999999994','${personalLedger}','${account}',10,'2026-11-20','','${category}','2026-11-20','非法订单','非法')`); }
   catch { businessTypeInPersonalRejected=true; }
@@ -176,5 +209,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0007/RLS; split ledgers; owner-isolated personal savings goals; optional configurable daily revenue goal with immutable past dates and Realtime publication; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0008/RLS; split ledgers; owner-isolated goals; optional daily target and Realtime publication; Shanghai occurrence timestamps; transaction edit/delete with refund safeguards, accurate daily totals, and recurring reset; actual-received-date revenue; idempotent business flows; pending bill gates; cycle-safe restore.');
 } finally { await db.close(); }

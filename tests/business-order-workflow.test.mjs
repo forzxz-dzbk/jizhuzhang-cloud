@@ -23,7 +23,7 @@ test('business orders persist business type, link real expenses and expose actua
   assert.match(home, /p_business_order_title: String\(form\.get\('orderTitle'\) \?\? ''\)\.trim\(\) \|\| null/);
   assert.doesNotMatch(home, /name="businessType" required/);
   assert.match(home, /shanghaiToday\(\)/);
-  assert.match(home, /formatShanghaiTimestamp\(row\.created_at\)/);
+  assert.match(home, /formatShanghaiTimestamp\(row\.occurred_at\)/);
   assert.match(home, /name="costOrder"/);
   assert.match(statistics, /business_order_totals/);
   assert.match(statistics, /business_type/);

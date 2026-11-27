@@ -10,6 +10,8 @@ const goalRunner = await readFile(new URL('../scripts/apply-hosted-0006.mjs', im
 const goalLauncher = await readFile(new URL('../scripts/apply-hosted-0006.ps1', import.meta.url), 'utf8');
 const realtimeGoalRunner = await readFile(new URL('../scripts/apply-hosted-0007.mjs', import.meta.url), 'utf8');
 const realtimeGoalLauncher = await readFile(new URL('../scripts/apply-hosted-0007.ps1', import.meta.url), 'utf8');
+const transactionRunner = await readFile(new URL('../scripts/apply-hosted-0008.mjs', import.meta.url), 'utf8');
+const transactionLauncher = await readFile(new URL('../scripts/apply-hosted-0008.ps1', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('hosted 0003 runner is pinned to the intended project, pooler and one migration', () => {
@@ -99,4 +101,18 @@ test('hosted 0007 command is project-pinned and only enables goal-setting realti
   assert.match(realtimeGoalLauncher, /apply-hosted-0007\.mjs/);
   assert.match(realtimeGoalLauncher, /Read-Host .* -AsSecureString/);
   assert.match(realtimeGoalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
+});
+
+test('hosted 0008 transaction migration is project-pinned and verifies RLS-bound editing RPCs', () => {
+  assert.match(packageJson.scripts['db:apply-transaction-management'], /apply-hosted-0008\.ps1/);
+  assert.match(transactionRunner, /eexsbypxhkfxqazwqgdq/);
+  assert.match(transactionRunner, /0008_edit_delete_transactions\.sql/);
+  assert.match(transactionRunner, /update_transaction/);
+  assert.match(transactionRunner, /delete_transaction/);
+  assert.match(transactionRunner, /transactions_rls/);
+  assert.match(transactionRunner, /has_function_privilege\('anon'/);
+  assert.match(transactionRunner, /rejectUnauthorized: true/);
+  assert.match(transactionLauncher, /apply-hosted-0008\.mjs/);
+  assert.match(transactionLauncher, /Read-Host .* -AsSecureString/);
+  assert.match(transactionLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
 });

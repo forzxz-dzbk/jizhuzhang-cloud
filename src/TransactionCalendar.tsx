@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { shanghaiCurrentMonth, shanghaiToday } from './shanghai-time.mjs';
 
 type Day = { occurred_on: string; income: number | string; expense: number | string };
-const currentMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date());
 const shiftMonth = (month: string, step: number) => {
   const [year, number] = month.split('-').map(Number);
   return new Date(Date.UTC(year, number - 1 + step, 1)).toISOString().slice(0, 7);
 };
 
 export function TransactionCalendar({ ledgerId }: { ledgerId: string }) {
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useState(shanghaiCurrentMonth);
   const [days, setDays] = useState<Day[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,13 +25,25 @@ export function TransactionCalendar({ ledgerId }: { ledgerId: string }) {
     else setDays((data ?? []) as Day[]);
     setLoading(false);
   }, [ledgerId, month]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const onLocalChange = () => void refresh();
+    window.addEventListener('jizhuzhang:transactions-changed', onLocalChange);
+    const client = supabase;
+    const channel = client?.channel(`calendar-${ledgerId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `ledger_id=eq.${ledgerId}` }, onLocalChange)
+      .subscribe();
+    return () => {
+      window.removeEventListener('jizhuzhang:transactions-changed', onLocalChange);
+      if (client && channel) void client.removeChannel(channel);
+    };
+  }, [ledgerId, refresh]);
   const map = new Map(days.map(day => [day.occurred_on, day]));
   const [year, number] = month.split('-').map(Number);
   const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
   const offset = (new Date(Date.UTC(year, number - 1, 1)).getUTCDay() + 6) % 7;
   const cells: Array<number | null> = [...Array.from({ length: offset }, () => null), ...Array.from({ length: count }, (_, index) => index + 1)];
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  const today = shanghaiToday();
   const label = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'long' }).format(new Date(`${month}-01T00:00:00+08:00`));
   return <section className="panel transaction-calendar">
     <div className="revenue-head"><h2>收支日历</h2><div className="month-nav"><button className="secondary" aria-label="上个月" onClick={() => setMonth(value => shiftMonth(value, -1))}>‹</button><strong>{label}</strong><button className="secondary" aria-label="下个月" onClick={() => setMonth(value => shiftMonth(value, 1))}>›</button></div></div>

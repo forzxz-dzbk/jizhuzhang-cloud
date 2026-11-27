@@ -10,6 +10,11 @@ export function shanghaiToday(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+export function shanghaiCurrentMonth(date = new Date()) {
+  const { year, month } = shanghaiParts(date, { year: 'numeric', month: '2-digit' });
+  return `${year}-${month}`;
+}
+
 export function formatShanghaiTimestamp(timestamp) {
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime())) return '时间未知';
