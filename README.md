@@ -1,84 +1,86 @@
-# 记祝账 · 云端候选
+# 记祝账 · 云端记账
 
-React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and Realtime. The cloud-first app is published on GitHub Pages and connected to the dedicated Supabase project; real-user acceptance is still pending, so do not treat it as production-ready for financial records yet.
+面向个人生活与自媒体/技术服务收入的响应式记账应用。前端使用 React + TypeScript + Vite，云端身份与 PostgreSQL 使用 Supabase；个人「支出」账本与「收入」账本独立存储、独立统计。默认货币 CNY、记账时区 Asia/Shanghai。
 
-## Current delivery status (2026-11-27)
+## 当前交付状态（2026-11-27）
 
-- Supabase project is connected through local `.env.local` using only the browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never add a service-role key to client configuration or source control.
-- The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
-- `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
-- No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: 40/40 unit tests, isolated migrations 0001–0006 and business/RLS/restore flows, and the production build pass. Migration 0006 is pending hosted application; it enables the optional configurable daily target and preserves prior target dates.
-- `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
+- 正式候选网页：[https://forzxz-dzbk.github.io/jizhuzhang-cloud/](https://forzxz-dzbk.github.io/jizhuzhang-cloud/)。GitHub Actions 的验证与 Pages 部署均通过；线上页面和生产 JS 均返回 HTTP 200。
+- 最新源码已推送到 `main`，含提交 `9fe31bf`。该版本线上包含北京时间流水、修改/删除流水、支出/退款汇总刷新和 Realtime 前端订阅。
+- 用户提供的 Supabase 执行结果确认 0008/0009 成功：发生时间列、受控编辑/删除 RPC、RLS 授权边界及 9 张云端表的 `supabase_realtime` publication 均已核验，未读取账目数据。
+- 最近本地验证：46 项自动化测试通过；PGlite 隔离迁移 0001–0009 测试通过；TypeScript/Vite 生产构建通过。隔离迁移测试不代替真实账号与双设备验收。
+- 未插入模拟财务账单。产品尚未完成真实数据场景的个人验收；首次在常用设备录入真实流水前，建议先完成本文「首次使用验收」。
 
-## Implemented
+## 已实现的核心能力
 
-- Email/password sign-in, sign-up, password recovery, persisted-session restoration, and sign-out.
-- Separate personal and Mac-business ledgers; ledger, account, category, and transaction views.
-- Server-side note search and page navigation across the full ledger history; literal `%`, `_`, and `\` are escaped rather than interpreted as search wildcards.
-- Transaction history shows account, category and linked business order (including transfers/refunds) so each amount can be audited from the list.
-- Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
-- Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
-- Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
-- Daily revenue goal is optional, per income ledger, and user-configurable; current setting starts today and completed past dates remain immutable. When enabled it counts actual receipts on `occurred_on` and refunds on their occurrence date. Apply `0006_optional_custom_daily_revenue_goal.sql` to hosted Supabase before using goal controls. Do not rerun migrations 0001–0005.
-- Idempotent transaction RPC, income orders/refunds, recurring-expense generation and confirmation, and optional daily revenue calendar.
-- Landing ledger uses a compact monthly summary and recent transactions; floating quick-entry opens expense/income category tiles seeded from built-in defaults, no manual category setup required. Existing underlying personal/business ledger separation is unchanged; displayed names are “支出” and “收入”.
-- Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
-- Owner-scoped RLS and clear client-side save errors.
-- Authenticated full-cloud JSON backup download and guarded restore, covering ledger data including savings-goal and optional daily-target metadata; export is paginated, restore is limited to an empty account, checks backup identity/schema, confirms before writing, and attempts to roll back partial writes. Pending expenses retain their status.
-- Personal savings goals use the live balance of a dedicated same-ledger account; they do not create income/expense rows, and are owner-RLS isolated and personal-ledger-only. Local migration and backup tests cover the new `savings_goals` table.
+- 邮箱/密码登录、注册、确认邮件重发、找回密码和已登录会话恢复。
+- 支出、收入分账；账户、默认分类、收支流水、备注搜索与分页。
+- 快捷记账面板、北京时间自动记账；流水可编辑金额/时间/账户/分类/备注，支持删除。
+- 交易统计按账本隔离；内部转账不计入收支，退款按实际发生日冲减收入，待确认固定支出不计入实际支出。
+- 固定支出计划与待确认账单；确认后才建立实际流水。
+- 可选的每日营收目标：每个收入账本可设置开关和目标值，目标按实际到账收入计算，历史生效日不被新设置覆盖。
+- 月度/年度概览、收支日历、收入目标日历、收入订单与经营成本统计。
+- 云端 JSON 全量备份与受限恢复；备份涵盖账本、账户、分类、订单、固定支出、存钱目标、目标设置和流水。
+- PWA 可添加到手机主屏幕；服务工作线程只缓存同源应用壳和静态资源，不缓存登录或数据库 API 数据。
+- RLS 按账号隔离，保存失败显示错误，关键写入使用幂等请求标识；云端表由 Realtime publication 支持订阅。
 
-## Not yet production-accepted
+## 首次使用与验收
 
-- GitHub Pages deployment is publicly reachable at https://forzxz-dzbk.github.io/jizhuzhang-cloud/ (HTTP 200 verified); this confirms hosting, not full production acceptance.
-- Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
-- Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
-- Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
-- Hosted schema verification confirms business_daily_revenue.revenue_date and security_invoker=true; the read-only query found no order_date output column and did not read financial rows. Never rerun 0001 or 0003.
-- Savings goals are not yet enabled on hosted Supabase. A read-only request to `public.savings_goals` returned PostgREST `PGRST205` / HTTP 404 on 2026-11-27, so migration `0004_savings_goals.sql` remains unapplied. Do not create savings goals in the live app until the migration is confirmed.
-- The guarded `scripts/apply-hosted-0004.ps1` launcher applies only migration 0004, pins the project reference, verifies RLS/policy/trigger, requires strict TLS, and reads the copied connection URI from the clipboard without echoing it. It can use the Supabase server root certificate at `supabase/server-ca.crt` or `supabase/prod-ca-2021.crt`; both are gitignored. The owner attempted earlier revisions, which failed before completing the migration; the latest revision has not yet been successfully run.
-- Sign-up, confirmation resend, and password-reset links return to the GitHub Pages repository base path. Custom QQ SMTP settings are present in Supabase (password hidden); one signup-resend request returned HTTP 200 with an empty JSON body. Actual inbox delivery and account activation remain unverified.
-- The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
-- GitHub Pages is configured and the latest deployment is green; `.env.local` is ignored and is not published.
+1. 在电脑和 iPhone Safari 打开上面的网页，使用同一账号登录。需要主屏幕使用时，在 Safari 分享菜单选择「添加到主屏幕」。
+2. 选择「支出」或「收入」账本。账本切换不会把两类流水混在一起。
+3. 点右下角「+」，选择支出/收入、分类并输入金额后保存。记账日期和时间自动使用北京时间；备注可留空。
+4. 近期流水可直接修改或删除；统计页可查看收支日历、今日实际支出/退款与今日净额。
+5. 验证双设备同步时，在两台设备登录同一账号；在一台设备保存一笔**真实**流水，再检查另一台设备的流水列表、日历和统计。不要为验收制造虚假账单。
+6. 每月固定支出先进入「资产」设置计划，生成账单后仍是「待确认」；核对实际金额和日期后再点「确认并记为实际支出」。
+7. 如需每日营收目标，在「收入」账本的统计区开启并设置适合自己的目标；默认关闭，500 元不是所有账号的固定目标。
 
-## Local setup and checks
+## 备份与恢复
 
-Requirements: Node.js 20+ and pnpm.
+- 登录后进入底部「资产」页，找到「云端数据备份」，点击「下载完整云端备份」。导出包含个人财务数据，请妥善保管，建议放在加密磁盘或可信的私有备份位置，不要公开分享。
+- 恢复入口也在「资产」页。为防止覆盖或混合现有数据，仅允许向**当前登录账号的空账本**恢复该账号导出的 JSON 备份；不会合并已有数据。恢复前请确认账号与文件无误，并保留原备份文件。
+- 若账本已有数据，先不要尝试绕过空账本保护；需要恢复时请先通过产品正常流程确认目标账号为空。恢复失败会显示错误，并尝试撤销本次部分写入。
 
-1. `pnpm install`
-2. Copy `.env.example` to `.env.local`; set the Supabase URL and browser-safe Publishable key.
-3. `pnpm dev`
-4. `pnpm test`, `pnpm test:db`, `pnpm build`, and `pnpm audit --prod`
+## 本地开发
 
-`pnpm test:db` runs the migration against isolated PGlite with a minimal Auth shim; it is not a substitute for live hosted-Postgres and Auth acceptance.
+需要 Node.js 20+ 与 pnpm：
 
-GitHub Actions runs the same core test, isolated migration, production build, and production dependency audit on pushes and pull requests to `main`.
+```powershell
+pnpm install
+Copy-Item .env.example .env.local
+# 编辑 .env.local，设置下面两个变量
+pnpm dev
+```
 
-## Deployment (GitHub Pages)
+环境变量：
 
-The repository is public and GitHub Pages publishes only the frontend bundle; user data remains in Supabase behind Auth and owner-scoped RLS. The workflow `.github/workflows/deploy-pages.yml` builds and publishes on every push to `main`.
+```dotenv
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<sb_publishable_...>
+```
 
-1. In repository Settings → Pages, select **GitHub Actions** as the source.
-2. In Settings → Secrets and variables → Actions → Variables, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. These are browser-public settings; never use a `service_role` key or database password.
-3. Push to `main` or manually run **Deploy GitHub Pages** in Actions. The site URL is `https://forzxz-dzbk.github.io/jizhuzhang-cloud/`.
-4. In Supabase Auth URL Configuration, set that exact URL as the Site URL and add it to Redirect URLs. Email confirmation is enabled, so test confirmation and recovery links after configuration.
-5. Verify sign-in, password recovery, ledger reads/writes, backup download and second-device sync before entering real financial data.
-## Savings-goals migration status and verification
+这两个值用于浏览器端连接，publishable key 本身不是高权限密钥，但所有数据访问必须由 RLS 限制。**严禁**把 Supabase `service_role` key、数据库密码或 SMTP 密码放进前端变量、提交到 Git、或发送到聊天。
 
-`0004_savings_goals.sql` was run in the hosted SQL Editor on 2026-11-27. Do not replay it unless a metadata check first proves the table or its security objects are incomplete. A read-only anonymous REST request must not be used to grant `anon` access; the expected result is permission denied because the migration grants table access only to `authenticated`. Never replay `0001_cloud_foundation.sql` or `0003_daily_goal_by_received_date.sql` on the live project.
+本地检查：
 
-Next acceptance must use a signed-in account in the deployed app. Verify that the empty savings-goals state loads, and that owner-only data access remains enforced; do not create test financial records. The hosted runner remains available for future additive migrations, but its URI must never be sent through chat or stored in a file.
+```powershell
+pnpm test
+pnpm test:db
+pnpm build
+```
 
-## Apply the Shanghai timestamp / optional business metadata migration
+`pnpm test:db` 在隔离的 PGlite 环境运行迁移与业务约束测试；它不连真实用户数据库，也不替代真实设备验收。
 
-The additive migration `supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql` drops no data. It allows business order title/type to be NULL, updates the authenticated business-income RPC to accept blank optional metadata, and keeps transaction `created_at` as the server timestamp. The UI derives each accounting date in `Asia/Shanghai` and displays `created_at` in that timezone. Apply only this file in the **记祝账** Supabase SQL Editor; do not replay migrations 0001–0004. Verify by checking the migration completes successfully before saving business income with blank metadata.
+## 部署和数据库操作
 
-## Apply optional daily revenue goals
+- GitHub Pages 只托管前端；用户数据保存在 Supabase。仓库 Actions Variables 需配置 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_PUBLISHABLE_KEY`。部署地址固定为 `https://forzxz-dzbk.github.io/jizhuzhang-cloud/`。
+- Supabase Auth 的 Site URL 与 Redirect URLs 应包含上述精确地址。邮件投递依赖 Supabase SMTP 设置；账户已能登录不代表新注册和找回密码邮件已完成全面投递验收。
+- 数据库迁移必须按编号逐项确认状态。`0001_cloud_foundation.sql` 是基础迁移，不可在已有业务表的数据库上重跑；后续只运行针对性、幂等迁移。
+- 0008/0009 已通过项目固定的 PowerShell 启动器执行并验证。若需重新检查，脚本会在本机隐藏提示输入 Database Password；密码不会显示、不会写文件，也不要发送给任何人。
+- 不要连接旧 `balance-test` / `balance-guard-e2e` 项目；本项目目标 Supabase 项目由脚本固定为 `eexsbypxhkfxqazwqgdq`。
 
-`supabase/migrations/0006_optional_custom_daily_revenue_goal.sql` adds owner-isolated per-income-ledger goal settings and updates the revenue view to compare actual receipts against the goal effective on each day. A missing setting means the goal is off. The app writes today's effective date only; past effective-date rows are protected by a database trigger. It does not insert financial transactions. Apply only 0006 in the hosted Supabase SQL Editor after confirming 0005 is already present; never replay 0001–0005.
+## 当前仍需的真实验收
 
-The guarded Windows runner `scripts/apply-hosted-0006.ps1` applies only 0006 to the pinned “记祝账” project, verifies the 0003/0005 prerequisites, uses TLS certificate validation, and checks RLS/history protection afterward without reading financial rows. Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0006.ps1"`; it prompts for the current database password with masked input. The project reference, Session Pooler host, and database user are pinned in the script; no URI copy is needed. The password is not printed or saved to a file. Never send credentials in chat.
+- 在本人 iPhone Safari 与电脑上用同一账号实测一笔真实流水的双向刷新、日历与统计一致性。
+- 在本人账号验证真实云端备份下载；恢复仅应在确认的空账本账号上执行，不能用含真实数据的主账号做破坏性测试。
+- 再验证 SMTP 对新注册/确认重发/找回密码邮件的实际收件情况。不要发送数据库密码或 SMTP 密码。
 
-## Supabase migration safety
-
-The current live project already contains the core schema. The initial migration is non-idempotent and must not be replayed. Before changing hosted schema, inspect current state and prepare a targeted, additive migration. Realtime setup is separately represented by `supabase/operations/enable-realtime.sql`.
+在上述真实账号验收完成前，这个版本是已部署的个人使用候选版，而不是经过所有真实场景验证的通用商业产品。
