@@ -20,21 +20,17 @@ export function RevenueCalendar({ ledgerId }: { ledgerId: string }) {
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalNotice, setGoalNotice] = useState('');
 
-  useEffect(() => {
-    let alive = true;
-    async function loadGoalSetting() {
-      if (!supabase) return;
-      const { data, error: queryError } = await supabase.from('business_daily_goal_settings')
-        .select('effective_on,enabled,target_amount').eq('ledger_id', ledgerId)
-        .lte('effective_on', today).order('effective_on', { ascending: false }).limit(1).maybeSingle();
-      if (!alive) return;
-      if (queryError) setError(`每日目标设置读取失败：${queryError.message}`);
-      else if (data) { setGoalEnabled(data.enabled); setTargetAmount(String(data.target_amount)); }
-      else { setGoalEnabled(false); setTargetAmount('500'); }
-    }
-    void loadGoalSetting();
-    return () => { alive = false; };
+  const loadGoalSetting = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error: queryError } = await supabase.from('business_daily_goal_settings')
+      .select('effective_on,enabled,target_amount').eq('ledger_id', ledgerId)
+      .lte('effective_on', today).order('effective_on', { ascending: false }).limit(1).maybeSingle();
+    if (queryError) setError(`每日目标设置读取失败：${queryError.message}`);
+    else if (data) { setGoalEnabled(data.enabled); setTargetAmount(String(data.target_amount)); }
+    else { setGoalEnabled(false); setTargetAmount('500'); }
   }, [ledgerId, today]);
+
+  useEffect(() => { void loadGoalSetting(); }, [loadGoalSetting]);
 
   async function saveGoalSetting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,9 +59,12 @@ export function RevenueCalendar({ ledgerId }: { ledgerId: string }) {
     if(queryError)setError(`营收日历读取失败：${queryError.message}`);else setDays((data??[]) as RevenueDay[]);setLoading(false);
   },[ledgerId,month]);
   useEffect(()=>{void refresh();const client=supabase;if(!client)return;
-    const channel=client.channel(`revenue-${ledgerId}`).on('postgres_changes',{event:'*',schema:'public',table:'transactions',filter:`ledger_id=eq.${ledgerId}`},()=>void refresh()).subscribe();
+    const channel=client.channel(`revenue-${ledgerId}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'transactions',filter:`ledger_id=eq.${ledgerId}`},()=>void refresh())
+      .on('postgres_changes',{event:'*',schema:'public',table:'business_daily_goal_settings',filter:`ledger_id=eq.${ledgerId}`},()=>{void loadGoalSetting();void refresh();})
+      .subscribe();
     return()=>{void client.removeChannel(channel);};
-  },[ledgerId,refresh]);
+  },[ledgerId,loadGoalSetting,refresh]);
 
   const map = new Map(days.map(day => [day.revenue_date, day]));
   const valid = days.filter(day => day.has_revenue_record && day.goal_enabled);

@@ -8,6 +8,8 @@ const savingsRunner = await readFile(new URL('../scripts/apply-hosted-0004.mjs',
 const savingsLauncher = await readFile(new URL('../scripts/apply-hosted-0004.ps1', import.meta.url), 'utf8');
 const goalRunner = await readFile(new URL('../scripts/apply-hosted-0006.mjs', import.meta.url), 'utf8');
 const goalLauncher = await readFile(new URL('../scripts/apply-hosted-0006.ps1', import.meta.url), 'utf8');
+const realtimeGoalRunner = await readFile(new URL('../scripts/apply-hosted-0007.mjs', import.meta.url), 'utf8');
+const realtimeGoalLauncher = await readFile(new URL('../scripts/apply-hosted-0007.ps1', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('hosted 0003 runner is pinned to the intended project, pooler and one migration', () => {
@@ -85,4 +87,16 @@ test('hosted 0006 goal migration command targets only the pinned project and ver
   assert.doesNotMatch(goalLauncher, /Get-Clipboard|Read-Host .*Pooler URI/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
+});
+
+test('hosted 0007 command is project-pinned and only enables goal-setting realtime', () => {
+  assert.match(packageJson.scripts['db:apply-realtime-goal'], /apply-hosted-0007\.ps1/);
+  assert.match(realtimeGoalRunner, /eexsbypxhkfxqazwqgdq/);
+  assert.match(realtimeGoalRunner, /0007_realtime_goal_settings\.sql/);
+  assert.match(realtimeGoalRunner, /business_daily_goal_settings/);
+  assert.match(realtimeGoalRunner, /supabase_realtime/);
+  assert.match(realtimeGoalRunner, /rejectUnauthorized: true/);
+  assert.match(realtimeGoalLauncher, /apply-hosted-0007\.mjs/);
+  assert.match(realtimeGoalLauncher, /Read-Host .* -AsSecureString/);
+  assert.match(realtimeGoalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
 });

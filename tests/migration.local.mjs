@@ -27,6 +27,8 @@ try {
   const optionalGoalMigration = await readFile(new URL('../supabase/migrations/0006_optional_custom_daily_revenue_goal.sql', import.meta.url), 'utf8');
   await db.exec(optionalGoalMigration);
   await db.exec(optionalGoalMigration);
+  const realtimeGoalMigration = await readFile(new URL('../supabase/migrations/0007_realtime_goal_settings.sql', import.meta.url), 'utf8');
+  await db.exec(realtimeGoalMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -174,5 +176,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0006/RLS; split ledgers; owner-isolated personal savings goals; optional configurable daily revenue goal with immutable past dates; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0007/RLS; split ledgers; owner-isolated personal savings goals; optional configurable daily revenue goal with immutable past dates and Realtime publication; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }
