@@ -78,6 +78,10 @@ test('hosted 0006 goal migration command targets only the pinned project and ver
   assert.equal(goalLauncher.charCodeAt(0), 0xfeff, 'UTF-8 BOM keeps Windows PowerShell 5.1 Chinese strings parseable');
   assert.match(goalLauncher, /Get-Clipboard -Raw/);
   assert.match(goalLauncher, /apply-hosted-0006\.mjs/);
+  assert.match(goalLauncher, /YOUR\[-_\]\?PASSWORD/);
+  assert.match(goalLauncher, /Read-Host .* -AsSecureString/);
+  assert.match(goalLauncher, /EscapeDataString\(\$plainPassword\)/);
+  assert.match(goalLauncher, /ZeroFreeBSTR\(\$passwordPointer\)/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
   assert.match(goalLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
 });
