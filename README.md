@@ -1,14 +1,14 @@
 # 记祝账 · 云端候选
 
-React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and Realtime. This is the cloud-first candidate intended to replace the local-only MVP; it is not yet a formally deployed production service.
+React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and Realtime. The cloud-first app is published on GitHub Pages and connected to the dedicated Supabase project; real-user acceptance is still pending, so do not treat it as production-ready for financial records yet.
 
-## Current delivery status (2026-11-24)
+## Current delivery status (2026-11-26)
 
 - Supabase project is connected through local `.env.local` using only the browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never add a service-role key to client configuration or source control.
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: `pnpm test` (24/24), `pnpm test:db` (pass for migrations 0001–0003 and business/RLS/restore flows), `pnpm build` (pass), and `pnpm audit --prod` (no known vulnerabilities).
+- Latest local evidence: 29/29 unit tests, local migrations 0001–0003 and business/RLS/restore flows, and production build all pass; production dependency audit (2026-11-26) reported no known vulnerabilities.
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -29,12 +29,12 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 
 ## Not yet production-accepted
 
-- Formal public deployment is live at https://forzxz-dzbk.github.io/jizhuzhang-cloud/ (HTTP 200 verified).
+- GitHub Pages deployment is publicly reachable at https://forzxz-dzbk.github.io/jizhuzhang-cloud/ (HTTP 200 verified); this confirms hosting, not full production acceptance.
 - Live end-to-end acceptance with the owner's real sign-in, a real test transaction, and a second device has not been completed. Do this before treating the product as ready for personal financial use.
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
 - Hosted schema verification confirms business_daily_revenue.revenue_date and security_invoker=true; the read-only query found no order_date output column and did not read financial rows. Never rerun 0001 or 0003.
-- Sign-up, confirmation resend, and password-reset links now explicitly return to the GitHub Pages repository base path. A fresh confirmation-email request was submitted from the deployed app; inbox delivery and account activation remain pending.
+- Sign-up, confirmation resend, and password-reset links return to the GitHub Pages repository base path. Custom QQ SMTP settings are present in Supabase (password hidden); one signup-resend request returned HTTP 200 with an empty JSON body. Actual inbox delivery and account activation remain unverified.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
 - GitHub Pages is configured and the latest deployment is green; `.env.local` is ignored and is not published.
 

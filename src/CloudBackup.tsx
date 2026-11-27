@@ -11,10 +11,11 @@ const TABLES = [
   'recurring_expenses',
   'transactions',
   'recurring_expense_instances',
+  'savings_goals',
 ] as const;
 type BackupTable = (typeof TABLES)[number];
 type Backup = { format: string; version: number; owner_id: string; tables: Record<BackupTable, Record<string, unknown>[]> };
-const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses'];
+const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'savings_goals'];
 const ROLLBACK_ORDER: BackupTable[] = [...CORE_RESTORE_ORDER, 'recurring_expense_instances', 'transactions'];
 
 async function readAllRows(table: (typeof TABLES)[number]) {
@@ -120,7 +121,7 @@ export function CloudBackup({ session }: { session: Session }) {
 
   return <section className="panel" aria-labelledby="backup-title">
     <h2 id="backup-title">云端数据备份</h2>
-    <p>导出此账号的生活与业务账本、账户、分类、订单、固定支出及全部流水。未确认的固定支出仍保持待确认状态。</p>
+    <p>导出此账号的生活与业务账本、账户、分类、订单、固定支出、存钱目标及全部流水。未确认的固定支出仍保持待确认状态。</p>
     <button className="secondary" disabled={busy} onClick={() => void exportBackup()}>{busy ? '正在读取云端数据…' : '下载完整云端备份'}</button>
     {notice && <p className="notice" role="status">{notice}</p>}
     {error && <p className="error" role="alert">{error}</p>}

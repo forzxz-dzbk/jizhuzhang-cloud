@@ -8,6 +8,7 @@ import { CloudBackup } from './CloudBackup';
 import { escapeLikePattern } from './transaction-search.mjs';
 import { AccountBalances } from './AccountBalances';
 import { BusinessOrderStatistics } from './BusinessOrderStatistics';
+import { SavingsGoals } from './SavingsGoals';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = {
@@ -224,6 +225,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       {active?.kind === 'business' && <RevenueCalendar ledgerId={active.id} />}
       {active&&<LedgerOverview ledgerId={active.id}/>}
       {active?.kind === 'business' && <BusinessOrderStatistics ledgerId={active.id} />}
+      {active?.kind === 'personal' && <SavingsGoals ledgerId={active.id} accounts={accounts} />}
       {active && <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{
         setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
         await loadTransactions(0,'');

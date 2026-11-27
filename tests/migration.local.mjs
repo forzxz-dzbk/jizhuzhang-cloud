@@ -20,11 +20,17 @@ try {
   await db.exec(businessMigration);
   const receivedDateMigration = await readFile(new URL('../supabase/migrations/0003_daily_goal_by_received_date.sql', import.meta.url), 'utf8');
   await db.exec(receivedDateMigration);
+  const savingsGoalsMigration = await readFile(new URL('../supabase/migrations/0004_savings_goals.sql', import.meta.url), 'utf8');
+  await db.exec(savingsGoalsMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
   const aCount = await db.query('select count(*)::int as n from public.ledgers');
   assert.equal(aCount.rows[0].n, 1, 'user A can see own ledger');
+  const personalLedger = (await db.query("select id from public.ledgers where kind='personal'")).rows[0].id;
+  const savingsAccount = (await db.query(`insert into public.accounts(ledger_id,name,opening_balance) values ('${personalLedger}','应急储蓄',120) returning id`)).rows[0].id;
+  const savingsGoal = (await db.query(`insert into public.savings_goals(ledger_id,account_id,name,target_amount,target_date) values ('${personalLedger}','${savingsAccount}','应急备用金',1000,'2027-06-01') returning id`)).rows[0].id;
+  assert.equal((await db.query(`select count(*)::int as n from public.savings_goals where id='${savingsGoal}'`)).rows[0].n, 1, 'personal ledger owner can create a cloud savings goal');
   await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
   const bCount = await db.query('select count(*)::int as n from public.ledgers');
   assert.equal(bCount.rows[0].n, 0, 'user B cannot see user A ledger');
@@ -51,7 +57,17 @@ try {
   await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
   const isolatedRevenue = await db.query(`select count(*)::int as n from public.business_daily_revenue where ledger_id='${business}'`);
   assert.equal(isolatedRevenue.rows[0].n, 0, 'security-invoker revenue view respects owner RLS');
+  const isolatedGoal = await db.query(`select count(*)::int as n from public.savings_goals where id='${savingsGoal}'`);
+  assert.equal(isolatedGoal.rows[0].n, 0, 'another user cannot read the savings goal');
   await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;`);
+  let businessSavingsGoalRejected=false;
+  try { await db.exec(`insert into public.savings_goals(ledger_id,account_id,name,target_amount) values ('${business}','${account}','business goal',100)`); }
+  catch { businessSavingsGoalRejected=true; }
+  assert.ok(businessSavingsGoalRejected,'savings goals cannot be attached to a business ledger');
+  let duplicateSavingsAccountRejected=false;
+  try { await db.exec(`insert into public.savings_goals(ledger_id,account_id,name,target_amount) values ('${personalLedger}','${savingsAccount}','duplicate goal',200)`); }
+  catch { duplicateSavingsAccountRejected=true; }
+  assert.ok(duplicateSavingsAccountRejected,'an account cannot back multiple active savings goals');
   const orderId = (await db.query("select id from public.business_orders where title='订单'")).rows[0].id;
   const refundId='55555555-5555-4555-8555-555555555555';
   const refundRequest=`select public.create_transaction('${refundId}','${business}','refund','${account}',100,'2026-11-19','',null,null,null,null,'${orderId}')`;
@@ -102,7 +118,6 @@ try {
   assert.equal(Number(orderStats.actual_revenue),300);
   assert.equal(Number(orderStats.allocated_cost),150);
   assert.equal(Number(orderStats.operating_surplus),150,'order surplus = actual receipts less refunds and allocated costs');
-  const personalLedger=(await db.query(`select id from public.ledgers where kind='personal'`)).rows[0].id;
   let businessTypeInPersonalRejected=false;
   try { await db.exec(`select public.create_business_income('99999999-9999-4999-8999-999999999994','${personalLedger}','${account}',10,'2026-11-20','','${category}','2026-11-20','非法订单','非法')`); }
   catch { businessTypeInPersonalRejected=true; }
@@ -122,5 +137,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0003/RLS; split ledgers; actual-received-date revenue; refund-occurrence-date reductions; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0004/RLS; split ledgers; owner-isolated personal savings goals with real account balance linkage; actual-received-date revenue; refund-occurrence-date reductions; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }
