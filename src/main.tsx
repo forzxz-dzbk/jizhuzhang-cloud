@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthGate } from './ui';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import './style.css';
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -8,5 +9,5 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><AuthGate /></StrictMode>,
+  <StrictMode><AppErrorBoundary><AuthGate /></AppErrorBoundary></StrictMode>,
 );
