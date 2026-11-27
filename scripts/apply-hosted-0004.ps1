@@ -23,7 +23,7 @@ $exitCode = 0
 try {
     $env:JZZ_SUPABASE_POOLER_URL = $connectionString
     Push-Location $projectRoot
-    try { & $nodePath $runner; $exitCode = $LASTEXITCODE }
+    try { & $nodePath --use-system-ca $runner; $exitCode = $LASTEXITCODE }
     finally { Pop-Location; Remove-Item Env:JZZ_SUPABASE_POOLER_URL -ErrorAction SilentlyContinue }
 }
 finally { $connectionString = $null }

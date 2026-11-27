@@ -48,7 +48,7 @@ test('hosted 0004 launcher reads only a copied PostgreSQL URI and clears it afte
   assert.doesNotMatch(savingsLauncher, /Read-Host/);
   assert.match(savingsLauncher, /Get-Command node\.exe/);
   assert.match(savingsLauncher, /codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node\.exe/);
-  assert.match(savingsLauncher, /& \$nodePath \$runner/);
+  assert.match(savingsLauncher, /& \$nodePath --use-system-ca \$runner/);
   assert.doesNotMatch(savingsLauncher, /pnpm/);
   assert.match(savingsLauncher, /JZZ_SUPABASE_POOLER_URL/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
