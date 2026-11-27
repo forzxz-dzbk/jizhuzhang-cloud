@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 
 type OrderRow = {
-  id: string; order_date: string; title: string; business_type: string;
+  id: string; order_date: string; title: string | null; business_type: string | null;
   gross_revenue: number | string; refunds: number | string; actual_revenue: number | string;
   allocated_cost: number | string; operating_surplus: number | string;
 };
@@ -53,7 +53,7 @@ export function BusinessOrderStatistics({ ledgerId }: { ledgerId: string }) {
     return () => { sequence.current += 1; void client.removeChannel(channel); };
   }, [ledgerId, refresh]);
 
-  const types = [...new Set(rows.map(row => row.business_type))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  const types = [...new Set(rows.map(row => row.business_type).filter((type): type is string => Boolean(type)))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const filtered = filter ? rows.filter(row => row.business_type === filter) : rows;
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
@@ -70,7 +70,7 @@ export function BusinessOrderStatistics({ ledgerId }: { ledgerId: string }) {
       </div>
       <label>按业务类型筛选<select value={filter} onChange={event=>{setFilter(event.target.value);setPage(0)}}><option value="">全部类型</option>{types.map(type=><option key={type} value={type}>{type}</option>)}</select></label>
       <div className="order-table-wrap"><table><thead><tr><th>日期 / 订单</th><th>类型</th><th>营收</th><th>退款</th><th>实收</th><th>关联成本</th><th>经营结余</th></tr></thead>
-        <tbody>{visible.map(row=><tr key={row.id}><td>{row.order_date} · {row.title}</td><td>{row.business_type}</td><td>{money(Math.round(Number(row.gross_revenue)*100))}</td><td>−{money(Math.round(Number(row.refunds)*100))}</td><td>{money(Math.round(Number(row.actual_revenue)*100))}</td><td>{money(Math.round(Number(row.allocated_cost)*100))}</td><td>{money(Math.round(Number(row.operating_surplus)*100))}</td></tr>)}</tbody></table></div>
+        <tbody>{visible.map(row=><tr key={row.id}><td>{row.order_date} · {row.title || '未填写订单名称'}</td><td>{row.business_type || '未填写业务类型'}</td><td>{money(Math.round(Number(row.gross_revenue)*100))}</td><td>−{money(Math.round(Number(row.refunds)*100))}</td><td>{money(Math.round(Number(row.actual_revenue)*100))}</td><td>{money(Math.round(Number(row.allocated_cost)*100))}</td><td>{money(Math.round(Number(row.operating_surplus)*100))}</td></tr>)}</tbody></table></div>
       <div className="order-pages"><button className="secondary" disabled={currentPage===0} onClick={()=>setPage(p=>Math.max(0,p-1))}>上一页</button><span>第 {currentPage+1}/{pageCount} 页，共 {filtered.length} 笔</span><button className="secondary" disabled={currentPage+1>=pageCount} onClick={()=>setPage(p=>p+1)}>下一页</button></div>
     </>}
     {loading && <p role="status">正在读取云端订单统计…</p>}

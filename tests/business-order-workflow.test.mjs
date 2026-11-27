@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('business orders persist business type, link real expenses and expose actual revenue and operating surplus', async () => {
   const migration = await readFile(new URL('../supabase/migrations/0002_business_order_costs_and_types.sql', import.meta.url), 'utf8');
+  const optionalMigration = await readFile(new URL('../supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql', import.meta.url), 'utf8');
   const home = await readFile(new URL('../src/LedgerHome.tsx', import.meta.url), 'utf8');
   const statistics = await readFile(new URL('../src/BusinessOrderStatistics.tsx', import.meta.url), 'utf8');
   assert.match(migration, /add column if not exists business_type text/);
@@ -16,7 +17,13 @@ test('business orders persist business type, link real expenses and expose actua
   assert.match(migration, /operating_surplus/);
   assert.match(home, /rpcName = 'create_business_income'/);
   assert.match(home, /rpcName = 'create_business_cost'/);
-  assert.match(home, /name="businessType" required/);
+  assert.match(home, /name="businessType"/);
+  assert.match(optionalMigration, /alter column title drop not null/);
+  assert.match(optionalMigration, /alter column business_type drop not null/);
+  assert.match(home, /p_business_order_title: String\(form\.get\('orderTitle'\) \?\? ''\)\.trim\(\) \|\| null/);
+  assert.doesNotMatch(home, /name="businessType" required/);
+  assert.match(home, /shanghaiToday\(\)/);
+  assert.match(home, /formatShanghaiTimestamp\(row\.created_at\)/);
   assert.match(home, /name="costOrder"/);
   assert.match(statistics, /business_order_totals/);
   assert.match(statistics, /business_type/);

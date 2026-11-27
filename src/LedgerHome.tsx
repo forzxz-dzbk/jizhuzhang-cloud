@@ -10,16 +10,17 @@ import { AccountBalances } from './AccountBalances';
 import { BusinessOrderStatistics } from './BusinessOrderStatistics';
 import { SavingsGoals } from './SavingsGoals';
 import { createRequestId } from './uuid.mjs';
+import { formatShanghaiTimestamp, shanghaiToday } from './shanghai-time.mjs';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = {
-  id: string; type: string; amount: number; occurred_on: string; note: string;
+  id: string; type: string; amount: number; occurred_on: string; created_at: string; note: string;
   account_id: string; transfer_account_id: string | null; category_id: string | null;
   business_order_id: string | null; refund_order_id: string | null; cost_order_id: string | null;
 };
 type Account = { id: string; name: string; opening_balance: number | string };
 type Category = { id: string; name: string; flow: 'income' | 'expense' };
-type BusinessOrder = { id: string; title: string; order_date: string };
+type BusinessOrder = { id: string; title: string | null; order_date: string };
 const TRANSACTION_PAGE_SIZE = 100;
 
 export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut: () => Promise<void> }) {
@@ -70,7 +71,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if(!client||!selected){setTransactions([]);setHasMoreTransactions(false);setTransactionsLoading(false);return;}
     setTransactionsLoading(true);
     try {
-      let request=client.from('transactions').select('id,type,amount,occurred_on,note,account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id')
+      let request=client.from('transactions').select('id,type,amount,occurred_on,created_at,note,account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id')
         .eq('ledger_id',selected).order('occurred_on',{ascending:false});
       if(filter) request=request.ilike('note',`%${escapeLikePattern(filter)}%`);
       const start=page*TRANSACTION_PAGE_SIZE;
@@ -153,7 +154,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const amount = Number(form.get('amount'));
-    const date = String(form.get('date'));
+    const date = shanghaiToday();
     const accountId = String(form.get('account'));
     const categoryId = entryType === 'transfer' || entryType === 'refund' ? null : String(form.get('category'));
     const transferAccountId = entryType === 'transfer' ? String(form.get('transferAccount')) : null;
@@ -168,9 +169,9 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       args = {
         p_request_id: requestId, p_ledger_id: selected, p_account_id: accountId,
         p_amount: amount, p_occurred_on: date, p_note: note, p_category_id: categoryId,
-        p_business_order_date: String(form.get('orderDate')),
-        p_business_order_title: String(form.get('orderTitle')),
-        p_business_type: String(form.get('businessType') ?? '').trim(),
+        p_business_order_date: date,
+        p_business_order_title: String(form.get('orderTitle') ?? '').trim() || null,
+        p_business_type: String(form.get('businessType') ?? '').trim() || null,
       };
     } else if (active.kind === 'business' && entryType === 'expense') {
       rpcName = 'create_business_cost';
@@ -208,7 +209,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     const details = row.type === 'transfer'
       ? [`转出：${account(row.account_id)}`, `转入：${row.transfer_account_id ? account(row.transfer_account_id) : '未知账户'}`]
       : [account(row.account_id), category].filter(Boolean);
-    if (order) details.push(`订单：${order.title}`);
+    if (order) details.push(`订单：${order.title || '未填写订单名称'}`);
     return { label, details: details.join(' · ') };
   };
   return <main className="dashboard">
@@ -241,13 +242,13 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
           <h3>新增流水</h3>
           <label>类型<select value={entryType} onChange={e=>setEntryType(e.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>
           <label>金额（CNY）<input name="amount" type="number" min="0.01" step="0.01" required/></label>
-          <label>日期<input name="date" type="date" required defaultValue={new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date())}/></label>
+          <p className="entry-time">记账时间自动使用北京时间：{formatShanghaiTimestamp(new Date().toISOString())}</p>
           <label>账户<select name="account" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
           {(entryType === 'income'||entryType==='expense') && <label>分类<select name="category" required>{categories.filter(c=>c.flow===entryType).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-          {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
-          {active.kind==='business'&&entryType==='expense'&&<label>关联业务订单（可选）<select name="costOrder"><option value="">不关联订单</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title}</option>)}</select></label>}
+          {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title || '未填写订单名称'}</option>)}</select></label>}
+          {active.kind==='business'&&entryType==='expense'&&<label>关联业务订单（可选）<select name="costOrder"><option value="">不关联订单</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title || '未填写订单名称'}</option>)}</select></label>}
           {entryType === 'transfer' && <label>转入账户<select name="transferAccount" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-          {active.kind === 'business' && entryType === 'income' && <><label>订单名称<input name="orderTitle" required maxLength={160}/></label><label>业务类型<input name="businessType" required maxLength={80} placeholder="例如：自媒体、技术服务"/></label><label>订单日期<input name="orderDate" type="date" required/></label></>}
+          {active.kind === 'business' && entryType === 'income' && <><label>订单名称（选填）<input name="orderTitle" maxLength={160}/></label><label>业务类型（选填）<input name="businessType" maxLength={80} placeholder="例如：自媒体、技术服务"/></label></>}
           <label>备注<input name="note" maxLength={500}/></label>
           <button disabled={busy || accounts.length===0 || ((entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType)) || (entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存流水'}</button>
           {accounts.length===0 && <p className="error">请先创建账户。</p>}
@@ -260,7 +261,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
         </div>
         {transactionsLoading && <p role="status">正在加载云端流水…</p>}
         {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
-        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{row.occurred_on} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
       </section>}
     </>}
     {notice && <p className="notice" role="status">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}

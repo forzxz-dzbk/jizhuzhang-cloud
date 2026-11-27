@@ -22,6 +22,8 @@ try {
   await db.exec(receivedDateMigration);
   const savingsGoalsMigration = await readFile(new URL('../supabase/migrations/0004_savings_goals.sql', import.meta.url), 'utf8');
   await db.exec(savingsGoalsMigration);
+  const shanghaiOptionalMigration = await readFile(new URL('../supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql', import.meta.url), 'utf8');
+  await db.exec(shanghaiOptionalMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -102,6 +104,11 @@ try {
   const orderIncome=`select public.create_business_income('${orderIncomeRequest}','${business}','${account}',400,'2026-11-20','','${category}','2026-11-20','代运营项目','内容服务')`;
   await db.exec(`${orderIncome}; ${orderIncome};`);
   const trackedOrder=(await db.query(`select id from public.business_orders where title='代运营项目'`)).rows[0].id;
+  const noMetadataIncome=`select public.create_business_income('99999999-9999-4999-8999-999999999995','${business}','${account}',25,'2026-11-21','','${category}','2026-11-21',null,null)`;
+  await db.exec(noMetadataIncome);
+  const emptyMetadata=(await db.query(`select o.title,o.business_type from public.business_orders o join public.transactions t on t.business_order_id=o.id where t.id='99999999-9999-4999-8999-999999999995'`)).rows[0];
+  assert.equal(emptyMetadata.title, null, 'business income can be saved without an order name');
+  assert.equal(emptyMetadata.business_type, null, 'business income can be saved without a business type');
   const costRequest='99999999-9999-4999-8999-999999999992';
   const cost=`select public.create_business_cost('${costRequest}','${business}','${account}',150,'2026-11-20','外包成本','${expenseCategory}','${trackedOrder}')`;
   await db.exec(`${cost}; ${cost};`);
@@ -137,5 +144,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0004/RLS; split ledgers; owner-isolated personal savings goals with real account balance linkage; actual-received-date revenue; refund-occurrence-date reductions; idempotent income/cost; business-type isolation; order actual revenue/cost/surplus; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0005/RLS; split ledgers; owner-isolated personal savings goals; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }

@@ -8,7 +8,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: 32/32 unit tests, isolated migrations 0001–0004 and business/RLS/restore flows, and the production build all pass. On 2026-11-27 the owner ran `0004_savings_goals.sql` in the hosted SQL Editor and reported `Success. No rows returned`; a read-only PostgREST request now recognizes `savings_goals` and returns 401 permission denied to the anonymous publishable role, consistent with the migration's `REVOKE` from `anon`. Authenticated feature acceptance remains pending.
+- Latest local evidence: 36/36 unit tests, isolated migrations 0001–0005 and business/RLS/restore flows, and the production build pass. `0004_savings_goals.sql` was run in hosted SQL Editor on 2026-11-27; `0005_shanghai_entry_time_optional_business_fields.sql` is a new additive migration and must be applied to hosted Supabase before using optional business-order metadata.
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -67,6 +67,10 @@ The repository is public and GitHub Pages publishes only the frontend bundle; us
 `0004_savings_goals.sql` was run in the hosted SQL Editor on 2026-11-27. Do not replay it unless a metadata check first proves the table or its security objects are incomplete. A read-only anonymous REST request must not be used to grant `anon` access; the expected result is permission denied because the migration grants table access only to `authenticated`. Never replay `0001_cloud_foundation.sql` or `0003_daily_goal_by_received_date.sql` on the live project.
 
 Next acceptance must use a signed-in account in the deployed app. Verify that the empty savings-goals state loads, and that owner-only data access remains enforced; do not create test financial records. The hosted runner remains available for future additive migrations, but its URI must never be sent through chat or stored in a file.
+
+## Apply the Shanghai timestamp / optional business metadata migration
+
+The additive migration `supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql` drops no data. It allows business order title/type to be NULL, updates the authenticated business-income RPC to accept blank optional metadata, and keeps transaction `created_at` as the server timestamp. The UI derives each accounting date in `Asia/Shanghai` and displays `created_at` in that timezone. Apply only this file in the **记祝账** Supabase SQL Editor; do not replay migrations 0001–0004. Verify by checking the migration completes successfully before saving business income with blank metadata.
 
 ## Supabase migration safety
 

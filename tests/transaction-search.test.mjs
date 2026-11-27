@@ -18,5 +18,5 @@ test('transaction search escapes LIKE wildcards and queries the complete remote 
   assert.match(home, /account_id,transfer_account_id,category_id,business_order_id,refund_order_id,cost_order_id/);
   assert.match(home, /转出：\$\{account\(row\.account_id\)\}/);
   assert.match(home, /已归档分类/);
-  assert.match(home, /订单：\$\{order\.title\}/);
+  assert.match(home, /订单：\$\{order\.title \|\| '未填写订单名称'\}/);
 });
