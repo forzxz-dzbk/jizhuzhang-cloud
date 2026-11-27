@@ -10,6 +10,7 @@ test('daily and monthly summaries use Shanghai ledger dates and exact cents', ()
     { occurred_on: '2026-11-21', income: '80.00', expense: '12.34' },
   ];
   assert.deepEqual(summarizeDay(rows, '2026-11-22'), { income: 30, expense: 4, surplus: 26 });
+  assert.deepEqual(summarizeDay([{ occurred_on: '2026-11-22', income: '0.00', expense: '12.34' }], '2026-11-22'), { income: 0, expense: 1234, surplus: -1234 });
   assert.deepEqual(sumMonthlyRows(rows), { income: 8030, expense: 1238, surplus: 6792 });
   assert.equal(formatCents(26), '¥0.26');
 });
@@ -42,7 +43,7 @@ test('daily summary is rendered per selected ledger and queries only actual tran
   assert.match(component, /timeZone:'Asia\/Shanghai'/);
   assert.match(component, /eq\('ledger_id',ledgerId\)/);
   assert.match(component, /今日财务小结/);
-  assert.match(component, /今日净额（收入 − 支出\/退款）/);
+  assert.match(component, /今日财务小结：收入 − 支出\/退款/);
   assert.match(component, /formatCents\(daily\.surplus\)/);
   assert.match(component, /本月支出 \/ 退款/);
   assert.match(component, /当前所选账本统计/);

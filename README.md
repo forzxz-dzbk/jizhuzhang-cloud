@@ -8,7 +8,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: 36/36 unit tests, isolated migrations 0001–0005 and business/RLS/restore flows, and the production build pass. `0004_savings_goals.sql` was run in hosted SQL Editor on 2026-11-27; `0005_shanghai_entry_time_optional_business_fields.sql` is a new additive migration and must be applied to hosted Supabase before using optional business-order metadata.
+- Latest local evidence: 40/40 unit tests, isolated migrations 0001–0006 and business/RLS/restore flows, and the production build pass. Migration 0006 is pending hosted application; it enables the optional configurable daily target and preserves prior target dates.
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -20,11 +20,12 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Account opening balances and current balances computed from actual income, expenses, refunds, and transfers, using cent-based arithmetic and complete keyset-paged ledger reads.
 - Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
-- The ¥500 daily goal now assigns business income to the transaction's actual received date (`occurred_on`), never the order creation date; refunds reduce the date they occur. The owner reports `Success. No rows returned` after running migration `0003_daily_goal_by_received_date.sql` in Supabase SQL Editor. A read-only hosted query in the correct Supabase project confirmed revenue_date (no order_date output column) and security_invoker=true. Do not rerun 0003.
-- Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
+- Daily revenue goal is optional, per income ledger, and user-configurable; current setting starts today and completed past dates remain immutable. When enabled it counts actual receipts on `occurred_on` and refunds on their occurrence date. Apply `0006_optional_custom_daily_revenue_goal.sql` to hosted Supabase before using goal controls. Do not rerun migrations 0001–0005.
+- Idempotent transaction RPC, income orders/refunds, recurring-expense generation and confirmation, and optional daily revenue calendar.
+- Landing ledger uses a compact monthly summary and recent transactions; floating quick-entry opens expense/income category tiles seeded from built-in defaults, no manual category setup required. Existing underlying personal/business ledger separation is unchanged; displayed names are “支出” and “收入”.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
 - Owner-scoped RLS and clear client-side save errors.
-- Authenticated full-cloud JSON backup download and guarded restore, covering the ledger data tables including savings-goal metadata; export is paginated, restore is limited to an empty account, checks backup identity/schema, confirms before writing, and attempts to roll back partial writes. Pending expenses retain their status.
+- Authenticated full-cloud JSON backup download and guarded restore, covering ledger data including savings-goal and optional daily-target metadata; export is paginated, restore is limited to an empty account, checks backup identity/schema, confirms before writing, and attempts to roll back partial writes. Pending expenses retain their status.
 - Personal savings goals use the live balance of a dedicated same-ledger account; they do not create income/expense rows, and are owner-RLS isolated and personal-ledger-only. Local migration and backup tests cover the new `savings_goals` table.
 
 ## Not yet production-accepted
@@ -71,6 +72,10 @@ Next acceptance must use a signed-in account in the deployed app. Verify that th
 ## Apply the Shanghai timestamp / optional business metadata migration
 
 The additive migration `supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql` drops no data. It allows business order title/type to be NULL, updates the authenticated business-income RPC to accept blank optional metadata, and keeps transaction `created_at` as the server timestamp. The UI derives each accounting date in `Asia/Shanghai` and displays `created_at` in that timezone. Apply only this file in the **记祝账** Supabase SQL Editor; do not replay migrations 0001–0004. Verify by checking the migration completes successfully before saving business income with blank metadata.
+
+## Apply optional daily revenue goals
+
+`supabase/migrations/0006_optional_custom_daily_revenue_goal.sql` adds owner-isolated per-income-ledger goal settings and updates the revenue view to compare actual receipts against the goal effective on each day. A missing setting means the goal is off. The app writes today's effective date only; past effective-date rows are protected by a database trigger. It does not insert financial transactions. Apply only 0006 in the hosted Supabase SQL Editor after confirming 0005 is already present; never replay 0001–0005.
 
 ## Supabase migration safety
 

@@ -12,10 +12,11 @@ const TABLES = [
   'transactions',
   'recurring_expense_instances',
   'savings_goals',
+  'business_daily_goal_settings',
 ] as const;
 type BackupTable = (typeof TABLES)[number];
 type Backup = { format: string; version: number; owner_id: string; tables: Record<BackupTable, Record<string, unknown>[]> };
-const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'savings_goals'];
+const CORE_RESTORE_ORDER: BackupTable[] = ['ledgers', 'business_daily_goal_settings', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'savings_goals'];
 const ROLLBACK_ORDER: BackupTable[] = [...CORE_RESTORE_ORDER, 'recurring_expense_instances', 'transactions'];
 
 async function readAllRows(table: (typeof TABLES)[number]) {
@@ -43,6 +44,8 @@ export function CloudBackup({ session }: { session: Session }) {
     if (value.format !== 'jizhuzhang-cloud-backup' || value.version !== 1 || value.owner_id !== session.user.id || !value.tables) {
       throw new Error('备份格式、版本或所属账号不匹配；只能恢复此账号导出的备份。');
     }
+    // Backward-compatible with version-1 exports created before goal settings existed.
+    if (value.tables.business_daily_goal_settings === undefined) value.tables.business_daily_goal_settings = [];
     for (const table of TABLES) {
       if (!Array.isArray(value.tables[table]) || value.tables[table].some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
         throw new Error(`备份中的 ${table} 数据格式无效。`);
@@ -121,7 +124,7 @@ export function CloudBackup({ session }: { session: Session }) {
 
   return <section className="panel" aria-labelledby="backup-title">
     <h2 id="backup-title">云端数据备份</h2>
-    <p>导出此账号的生活与业务账本、账户、分类、订单、固定支出、存钱目标及全部流水。未确认的固定支出仍保持待确认状态。</p>
+    <p>导出此账号的支出与收入账本、每日目标设置、账户、分类、订单、固定支出、存钱目标及全部流水。未确认的固定支出仍保持待确认状态。</p>
     <button className="secondary" disabled={busy} onClick={() => void exportBackup()}>{busy ? '正在读取云端数据…' : '下载完整云端备份'}</button>
     {notice && <p className="notice" role="status">{notice}</p>}
     {error && <p className="error" role="alert">{error}</p>}

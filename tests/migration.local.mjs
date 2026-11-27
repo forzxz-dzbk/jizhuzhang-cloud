@@ -24,6 +24,9 @@ try {
   await db.exec(savingsGoalsMigration);
   const shanghaiOptionalMigration = await readFile(new URL('../supabase/migrations/0005_shanghai_entry_time_optional_business_fields.sql', import.meta.url), 'utf8');
   await db.exec(shanghaiOptionalMigration);
+  const optionalGoalMigration = await readFile(new URL('../supabase/migrations/0006_optional_custom_daily_revenue_goal.sql', import.meta.url), 'utf8');
+  await db.exec(optionalGoalMigration);
+  await db.exec(optionalGoalMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -50,10 +53,13 @@ try {
   await db.exec(`${request}; ${request};`);
   const orderCount = await db.query("select count(*)::int as n from public.business_orders where title='订单'");
   assert.equal(orderCount.rows[0].n, 1, 'retry uses same idempotency key and does not duplicate order');
-  const target = await db.query(`select revenue_date::text as revenue_date,revenue,goal_reached from public.business_daily_revenue where ledger_id='${business}'`);
+  const target = await db.query(`select revenue_date::text as revenue_date,revenue,goal_enabled,goal_amount,goal_reached from public.business_daily_revenue where ledger_id='${business}'`);
   assert.equal(Number(target.rows[0].revenue), 500);
   assert.equal(target.rows[0].revenue_date, '2026-11-18', 'daily target follows actual received transaction date, not order date');
-  assert.equal(target.rows[0].goal_reached, true, 'actual received revenue reaches the 500 threshold');
+  assert.equal(target.rows[0].goal_reached, false, 'revenue is not treated as target completion when the optional goal is off');
+  const priorDefaultGoal = await db.query(`select goal_enabled,goal_amount from public.business_daily_revenue where ledger_id='${business}' and revenue_date='2026-11-18'`);
+  assert.equal(priorDefaultGoal.rows[0].goal_enabled, false, 'daily target is optional and is disabled until explicitly enabled');
+  assert.equal(priorDefaultGoal.rows[0].goal_amount, null, 'disabled target does not invent a target amount');
   const orderDay = await db.query(`select revenue_date from public.business_daily_revenue where ledger_id='${business}' and revenue_date='2026-11-17'`);
   assert.equal(orderDay.rows.length, 0, 'placing an order does not record cash received that day');
   await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
@@ -109,6 +115,30 @@ try {
   const emptyMetadata=(await db.query(`select o.title,o.business_type from public.business_orders o join public.transactions t on t.business_order_id=o.id where t.id='99999999-9999-4999-8999-999999999995'`)).rows[0];
   assert.equal(emptyMetadata.title, null, 'business income can be saved without an order name');
   assert.equal(emptyMetadata.business_type, null, 'business income can be saved without a business type');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const goalIncome = `select public.create_business_income('99999999-9999-4999-8999-999999999996','${business}','${account}',75,'${today}','','${category}','${today}','目标设置验证','验证')`;
+  await db.exec(goalIncome);
+  await db.exec(`insert into public.business_daily_goal_settings(ledger_id,effective_on,enabled,target_amount) values ('${business}','${today}',true,70)`);
+  const todayGoal=(await db.query(`select goal_enabled,goal_amount,goal_reached from public.business_daily_revenue where ledger_id='${business}' and revenue_date='${today}'`)).rows[0];
+  assert.equal(todayGoal.goal_enabled, true, 'a user can enable their own goal');
+  assert.equal(Number(todayGoal.goal_amount), 70, 'daily goal amount is configurable per ledger');
+  assert.equal(todayGoal.goal_reached, true, 'goal threshold compares actual received income against custom amount');
+  const tomorrow = (await db.query(`select '${today}'::date + 1 as day`)).rows[0].day.toISOString().slice(0, 10);
+  await db.exec(`insert into public.business_daily_goal_settings(ledger_id,effective_on,enabled,target_amount) values ('${business}','${tomorrow}',true,100)`);
+  await db.exec(`select public.create_business_income('99999999-9999-4999-8999-999999999997','${business}','${account}',75,'${tomorrow}','','${category}','${tomorrow}','未来目标验证','验证')`);
+  const tomorrowGoal=(await db.query(`select goal_amount,goal_reached from public.business_daily_revenue where ledger_id='${business}' and revenue_date='${tomorrow}'`)).rows[0];
+  assert.equal(Number(tomorrowGoal.goal_amount), 100, 'a newly effective goal applies to its own future date');
+  assert.equal(tomorrowGoal.goal_reached, false, 'custom goal uses the target effective on the receipt date');
+  const unchangedPastGoal=(await db.query(`select goal_amount,goal_reached from public.business_daily_revenue where ledger_id='${business}' and revenue_date='${today}'`)).rows[0];
+  assert.equal(Number(unchangedPastGoal.goal_amount), 70, 'a later setting does not rewrite the previous date target');
+  assert.equal(unchangedPastGoal.goal_reached, true, 'a later setting does not change a completed achieved day');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userB}',false); set role authenticated;`);
+  assert.equal((await db.query(`select count(*)::int as n from public.business_daily_goal_settings where ledger_id='${business}'`)).rows[0].n, 0, 'goal settings are isolated by owner RLS');
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;`);
+  let pastGoalSettingRejected=false;
+  try { await db.exec(`insert into public.business_daily_goal_settings(ledger_id,effective_on,enabled,target_amount) values ('${business}','${today}'::date-1,true,5)`); }
+  catch { pastGoalSettingRejected=true; }
+  assert.ok(pastGoalSettingRejected, 'past goal records cannot be changed by backdating a setting');
   const costRequest='99999999-9999-4999-8999-999999999992';
   const cost=`select public.create_business_cost('${costRequest}','${business}','${account}',150,'2026-11-20','外包成本','${expenseCategory}','${trackedOrder}')`;
   await db.exec(`${cost}; ${cost};`);
@@ -144,5 +174,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0005/RLS; split ledgers; owner-isolated personal savings goals; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
+  console.log('PASS migrations 0001-0006/RLS; split ledgers; owner-isolated personal savings goals; optional configurable daily revenue goal with immutable past dates; actual-received-date revenue; Shanghai entry date/time and optional business metadata; refund reductions; idempotent income/cost; business isolation; monthly pending generation; pending exclusion; confirmed expense retry; cycle-safe restore.');
 } finally { await db.close(); }

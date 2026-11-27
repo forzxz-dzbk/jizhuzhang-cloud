@@ -103,7 +103,7 @@ export function AuthGate() {
   if (session && mode !== 'recovery_password') return <LedgerHome session={session} onSignOut={signOut} />;
 
   const title = mode === 'signin' ? '登录你的账户' : mode === 'signup' ? '创建账户' : mode === 'recovery_password' ? '设置新密码' : '重置密码';
-  return <main className="card"><div className="brand">记祝账</div><h1>{title}</h1><p>个人生活与 Mac 业务账本将严格分开。</p>
+  return <main className="card"><div className="brand">记祝账</div><h1>{title}</h1><p>支出与收入账本独立保存、独立统计。</p>
     <form onSubmit={submit}>
       {mode !== 'recovery_password' && <label>邮箱<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>}
       {mode !== 'recovery' && <label>密码<input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} minLength={8} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}

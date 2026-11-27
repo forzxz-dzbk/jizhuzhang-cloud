@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 test('cloud backup exports every ledger table through the authenticated client with paging and explicit errors', async () => {
   const backup = await readFile(new URL('../src/CloudBackup.tsx', import.meta.url), 'utf8');
   const home = await readFile(new URL('../src/LedgerHome.tsx', import.meta.url), 'utf8');
-  for (const table of ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'transactions', 'recurring_expense_instances', 'savings_goals']) {
+  for (const table of ['ledgers', 'accounts', 'categories', 'business_orders', 'recurring_expenses', 'transactions', 'recurring_expense_instances', 'savings_goals', 'business_daily_goal_settings']) {
     assert.match(backup, new RegExp(`'${table}'`));
   }
   assert.match(backup, /\.range\(start, start \+ pageSize - 1\)/);
@@ -25,4 +25,5 @@ test('cloud backup exports every ledger table through the authenticated client w
   assert.match(backup, /\.upsert\(chunk, \{ onConflict: 'id' \}\)/);
   assert.match(backup, /下载完整云端备份/);
   assert.match(backup, /存钱目标/);
+  assert.match(backup, /Backward-compatible with version-1 exports/);
 });

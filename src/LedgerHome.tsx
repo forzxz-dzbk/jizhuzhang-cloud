@@ -11,6 +11,9 @@ import { BusinessOrderStatistics } from './BusinessOrderStatistics';
 import { SavingsGoals } from './SavingsGoals';
 import { createRequestId } from './uuid.mjs';
 import { formatShanghaiTimestamp, shanghaiToday } from './shanghai-time.mjs';
+import { DEFAULT_CATEGORIES, missingDefaultCategories } from './ledger-default-categories.mjs';
+import { LedgerMonthCard } from './LedgerMonthCard';
+import { TransactionCalendar } from './TransactionCalendar';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = {
@@ -46,6 +49,9 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [syncState,setSyncState]=useState('连接实时同步…');
+  const [activeTab,setActiveTab]=useState<'ledger'|'assets'|'stats'>('ledger');
+  const [entryOpen,setEntryOpen]=useState(false);
+  const [selectedCategoryId,setSelectedCategoryId]=useState('');
 
   const loadLedgers = useCallback(async () => {
     if (!supabase) return;
@@ -61,6 +67,11 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   }, []);
 
   useEffect(() => { void loadLedgers(); }, [loadLedgers]);
+  useEffect(() => {
+    const openStats = () => setActiveTab('stats');
+    window.addEventListener('jizhuzhang:open-stats', openStats);
+    return () => window.removeEventListener('jizhuzhang:open-stats', openStats);
+  }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => { setSearchQuery(transactionSearch.trim()); setTransactionPage(0); }, 250);
     return () => window.clearTimeout(timer);
@@ -97,9 +108,27 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       supabase.from('business_orders').select('id,title,order_date').eq('ledger_id', selected).order('order_date',{ascending:false}),
     ]);
     if (a.error || c.error || o.error) setError(`账户/分类/订单读取失败：${a.error?.message ?? c.error?.message ?? o.error?.message}`);
-    else { setAccounts((a.data ?? []) as Account[]); setCategories((c.data ?? []) as Category[]); setOrders((o.data??[]) as BusinessOrder[]); }
-  }, [selected]);
+    else {
+      let categoryRows = (c.data ?? []) as Category[];
+      const missing = (['expense','income'] as const).flatMap(flow => missingDefaultCategories(categoryRows, flow).map(item => ({ ledger_id: selected, name: item.name, flow })));
+      if (missing.length) {
+        const { error: seedError } = await supabase.from('categories').insert(missing);
+        if (seedError) setError(`内置分类初始化失败：${seedError.message}`);
+        else {
+          const seeded = await supabase.from('categories').select('id,name,flow').eq('ledger_id', selected).eq('is_archived', false).order('name');
+          if (seeded.error) setError(`默认分类读取失败：${seeded.error.message}`);
+          else categoryRows = (seeded.data ?? []) as Category[];
+        }
+      }
+      setAccounts((a.data ?? []) as Account[]); setCategories(categoryRows); setOrders((o.data??[]) as BusinessOrder[]);
+      setSelectedCategoryId(current => categoryRows.some(item => item.id === current && item.flow === entryType) ? current : categoryRows.find(item => item.flow === entryType)?.id ?? '');
+    }
+  }, [selected, entryType]);
   useEffect(() => { void loadOptions(); }, [loadOptions]);
+  useEffect(() => {
+    const choices = categories.filter(item => item.flow === entryType);
+    if (!choices.some(item => item.id === selectedCategoryId)) setSelectedCategoryId(choices[0]?.id ?? '');
+  }, [categories, entryType, selectedCategoryId]);
   useEffect(()=>{
     const client=supabase;
     if(!client||!selected){setSyncState('选择账本以连接同步');return;}
@@ -115,14 +144,16 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   async function createLedger(kind: Ledger['kind']) {
     if (!supabase) return;
     setBusy(true); setError(''); setNotice('');
-    const name = kind === 'personal' ? '个人生活' : 'Mac 业务';
+    const name = kind === 'personal' ? '支出' : '收入';
     const { data, error: insertError } = await supabase.from('ledgers')
       .insert({ owner_id: session.user.id, kind, name }).select('id,kind,name').single();
     if (insertError) setError(insertError.code === '23505' ? '该账本已存在，请刷新列表。' : `创建失败：${insertError.message}`);
     else {
       const ledger = data as Ledger;
       setLedgers(current => [...current, ledger]); setSelected(ledger.id);
-      setNotice(`${name}账本已保存到云端。`);
+      const { error: accountError } = await supabase.from('accounts').insert({ ledger_id: ledger.id, name: '现金', opening_balance: 0 });
+      if (accountError) setError(`“${name}”已创建，但默认现金账户创建失败：${accountError.message}`);
+      setNotice(`${name}账本已保存到云端；默认分类正在准备。`);
     }
     setBusy(false);
   }
@@ -194,12 +225,13 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
       setRequestId(createRequestId());
       setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
       await Promise.all([loadOptions(), loadTransactions(0,'')]);
-      formElement.reset();
+      formElement.reset(); setEntryOpen(false);
     }
     setBusy(false);
   }
 
   const active = ledgers.find(row => row.id === selected);
+  const displayName = (row: Ledger) => row.kind === 'personal' ? '支出' : '收入';
   const transactionDetails = (row: Transaction) => {
     const account = (id: string) => accounts.find(item => item.id === id)?.name ?? '已归档账户';
     const category = row.category_id ? categories.find(item => item.id === row.category_id)?.name ?? '已归档分类' : '';
@@ -212,57 +244,65 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if (order) details.push(`订单：${order.title || '未填写订单名称'}`);
     return { label, details: details.join(' · ') };
   };
-  return <main className="dashboard">
-    <header className="dash-header"><div><div className="brand">记祝账</div><p>{session.user.email}</p></div><button className="secondary" onClick={onSignOut}>退出登录</button></header>
-    <h1>你的账本</h1><p>个人生活与 Mac 业务分开保存、分开统计。</p>
-    <CloudBackup session={session} />
+  return <main className="dashboard app-shell">
+    <header className="app-header"><div><div className="brand">记祝账</div><small>{active ? displayName(active) : '云端账本'}</small></div><button className="profile-button secondary" aria-label="退出登录" onClick={onSignOut}>退出</button></header>
     <section className="ledger-actions" aria-label="创建账本">
-      {!ledgers.some(row => row.kind === 'personal') && <button disabled={busy} onClick={() => void createLedger('personal')}>创建个人生活账本</button>}
-      {!ledgers.some(row => row.kind === 'business') && <button disabled={busy} onClick={() => void createLedger('business')}>创建 Mac 业务账本</button>}
+      {!ledgers.some(row => row.kind === 'personal') && <button disabled={busy} onClick={() => void createLedger('personal')}>创建支出账本</button>}
+      {!ledgers.some(row => row.kind === 'business') && <button disabled={busy} onClick={() => void createLedger('business')}>创建收入账本</button>}
     </section>
     {loading && <p role="status">正在读取云端账本…</p>}
-    {!loading && ledgers.length === 0 && <section className="empty"><h2>还没有账本</h2><p>创建账本后即可从真实云端读取记录。此处不会用示例账目填充。</p></section>}
+    {!loading && ledgers.length === 0 && <section className="empty"><h2>开始记账</h2><p>创建支出或收入账本后即可使用。两类账本会独立保存、独立统计。</p></section>}
     {ledgers.length > 0 && <>
-      <nav className="ledger-tabs" aria-label="选择账本">{ledgers.map(row => <button key={row.id} className={selected === row.id ? 'selected' : 'secondary'} onClick={() => setSelected(row.id)}>{row.name}</button>)}</nav>
-      {active?.kind === 'business' && <RevenueCalendar ledgerId={active.id} />}
-      {active&&<LedgerOverview ledgerId={active.id}/>}
-      {active?.kind === 'business' && <BusinessOrderStatistics ledgerId={active.id} />}
-      {active?.kind === 'personal' && <SavingsGoals ledgerId={active.id} accounts={accounts} />}
-      {active && <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{
-        setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
-        await loadTransactions(0,'');
-      }} />}
-      {active && <section className="panel"><h2>{active.name} · 近期明细</h2>
-        <section className="setup-grid">
-          <form onSubmit={createAccount}><h3>新增账户</h3><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><label>期初余额（CNY）<input name="opening_balance" type="number" step="0.01" required defaultValue="0"/></label><small>这是首次使用时的起点余额；负数可用于记录信用卡等负债。</small><button disabled={busy}>保存账户</button></form>
-          <form onSubmit={e=>void createCategory(e, categoryFlow)}><h3>新增分类</h3><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="例如：餐饮或工资"/><button disabled={busy}>保存分类</button></form>
+      <nav className="ledger-tabs" aria-label="选择账本">{ledgers.map(row => <button key={row.id} className={selected === row.id ? 'selected' : 'secondary'} onClick={() => { setSelected(row.id); setActiveTab('ledger'); }}>{displayName(row)}</button>)}</nav>
+      {active && activeTab === 'ledger' && <>
+        <LedgerMonthCard ledgerId={active.id} kind={active.kind}/>
+        <section className="recent-ledger panel" aria-label="近期流水"><div className="section-heading"><h2>近期流水</h2><button className="secondary compact-button" onClick={() => void loadTransactions(0, '')}>刷新</button></div>
+          <label className="quick-search">搜索备注<input type="search" aria-label="搜索备注" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="搜索流水"/></label>
+          {transactionsLoading && <p role="status">正在加载云端流水…</p>}
+          {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : '本月暂时没有流水，点击右下角 + 开始记账。'}</p>}
+          {transactions.length > 0 && <ul className="transaction-list">{transactions.slice(0, 8).map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong className={row.type==='expense'||row.type==='refund'?'amount-expense':'amount-income'}>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+          {transactions.length > 8 && <button className="secondary" onClick={() => setActiveTab('stats')}>查看全部流水</button>}
         </section>
+      </>}
+      {active && activeTab === 'assets' && <section className="panel"><h1>资产与设置</h1><p>支出与收入账本仍然分开存储和统计。</p>
+        <form className="asset-create-form" onSubmit={createAccount}><h2>新增账户</h2><input aria-label="账户名称" required maxLength={80} value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="例如：银行卡"/><label>期初余额（CNY）<input name="opening_balance" type="number" step="0.01" required defaultValue="0"/></label><small>负数可用于记录信用卡等负债。</small><button disabled={busy}>保存账户</button></form>
+        <form className="asset-create-form" onSubmit={e=>void createCategory(e, categoryFlow)}><h2>添加自定义分类</h2><select aria-label="分类类型" value={categoryFlow} onChange={e=>setCategoryFlow(e.target.value as Category['flow'])}><option value="expense">支出</option><option value="income">收入</option></select><input aria-label="分类名称" required maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} placeholder="内置分类已准备好，也可自定义"/><button disabled={busy}>保存分类</button></form>
         <AccountBalances ledgerId={active.id} accounts={accounts}/>
-        <form className="entry-form" onSubmit={createTransaction}>
-          <h3>新增流水</h3>
-          <label>类型<select value={entryType} onChange={e=>setEntryType(e.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>
-          <label>金额（CNY）<input name="amount" type="number" min="0.01" step="0.01" required/></label>
-          <p className="entry-time">记账时间自动使用北京时间：{formatShanghaiTimestamp(new Date().toISOString())}</p>
-          <label>账户<select name="account" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-          {(entryType === 'income'||entryType==='expense') && <label>分类<select name="category" required>{categories.filter(c=>c.flow===entryType).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-          {entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title || '未填写订单名称'}</option>)}</select></label>}
-          {active.kind==='business'&&entryType==='expense'&&<label>关联业务订单（可选）<select name="costOrder"><option value="">不关联订单</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_date} · {o.title || '未填写订单名称'}</option>)}</select></label>}
-          {entryType === 'transfer' && <label>转入账户<select name="transferAccount" required>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-          {active.kind === 'business' && entryType === 'income' && <><label>订单名称（选填）<input name="orderTitle" maxLength={160}/></label><label>业务类型（选填）<input name="businessType" maxLength={80} placeholder="例如：自媒体、技术服务"/></label></>}
-          <label>备注<input name="note" maxLength={500}/></label>
-          <button disabled={busy || accounts.length===0 || ((entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType)) || (entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存流水'}</button>
-          {accounts.length===0 && <p className="error">请先创建账户。</p>}
-          {(entryType==='income'||entryType==='expense') && !categories.some(c=>c.flow===entryType) && <p className="error">请先创建对应类型的分类。</p>}
-          {entryType==='refund'&&orders.length===0&&<p className="error">请先录入原始业务收入订单。</p>}
-        </form>
-        <div className="transaction-tools">
-          <label>按备注搜索<input type="search" aria-label="搜索备注" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="输入关键词查找云端全部流水"/></label>
-          <div className="transaction-pagination"><button className="secondary" disabled={busy||loading||transactionPage===0} onClick={()=>setTransactionPage(page=>Math.max(0,page-1))}>上一页</button><span>第 {transactionPage+1} 页</span><button className="secondary" disabled={busy||loading||!hasMoreTransactions} onClick={()=>setTransactionPage(page=>page+1)}>下一页</button></div>
-        </div>
-        {transactionsLoading && <p role="status">正在加载云端流水…</p>}
-        {transactions.length === 0 && !transactionsLoading && !error && <p className="empty">{searchQuery ? '没有找到匹配备注的流水。' : transactionPage > 0 ? '本页没有更多流水。' : '该账本暂无真实流水。'}</p>}
-        {transactions.length > 0 && <ul className="transaction-list">{transactions.map(row => {const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note || detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type === 'transfer' ? '↔ ' : row.type === 'expense' || row.type === 'refund' ? '−' : '+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+        <RecurringExpenses ledgerId={active.id} accounts={accounts} categories={categories} onConfirmed={async()=>{setTransactionSearch('');setSearchQuery('');setTransactionPage(0);await loadTransactions(0,'');}} />
+        <CloudBackup session={session} />
       </section>}
+      {active && activeTab === 'stats' && <>
+        <TransactionCalendar ledgerId={active.id}/>
+        <LedgerOverview ledgerId={active.id}/>
+        {active.kind === 'business' && <><RevenueCalendar ledgerId={active.id}/><BusinessOrderStatistics ledgerId={active.id}/></>}
+        {active.kind === 'personal' && <SavingsGoals ledgerId={active.id} accounts={accounts}/>}
+        <section className="panel all-transactions"><h2>全部流水</h2>
+          <div className="transaction-tools"><label>按备注搜索<input type="search" aria-label="全部流水搜索" maxLength={120} value={transactionSearch} onChange={event=>setTransactionSearch(event.target.value)} placeholder="输入关键词查找云端流水"/></label><div className="transaction-pagination"><button className="secondary" disabled={busy||loading||transactionPage===0} onClick={()=>setTransactionPage(page=>Math.max(0,page-1))}>上一页</button><span>第 {transactionPage+1} 页</span><button className="secondary" disabled={busy||loading||!hasMoreTransactions} onClick={()=>setTransactionPage(page=>page+1)}>下一页</button></div></div>
+          {transactions.length>0&&<ul className="transaction-list">{transactions.map(row=>{const detail=transactionDetails(row);return <li key={row.id}><span><span>{formatShanghaiTimestamp(row.created_at)} · {row.note||detail.label}</span><small>{detail.label} · {detail.details}</small></span><strong>{row.type==='transfer'?'↔ ':row.type==='expense'||row.type==='refund'?'−':'+'}¥{Number(row.amount).toFixed(2)}</strong></li>})}</ul>}
+          {transactions.length===0&&!transactionsLoading&&<p className="empty">该账本暂无真实流水。</p>}
+        </section>
+      </>}
+      {active && <>
+        <button className="floating-add" aria-label="新增支出或收入" onClick={() => { setEntryType('expense'); setEntryOpen(true); }}>+</button>
+        <nav className="bottom-tabs" aria-label="主导航"><button className={activeTab==='ledger'?'active':''} onClick={()=>setActiveTab('ledger')}><span>▤</span>账本</button><button className={activeTab==='assets'?'active':''} onClick={()=>setActiveTab('assets')}><span>▱</span>资产</button><button className={activeTab==='stats'?'active':''} onClick={()=>setActiveTab('stats')}><span>▥</span>统计</button></nav>
+      </>}
+      {active && entryOpen && <div className="quick-entry-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setEntryOpen(false);}}><section className="quick-entry-sheet" role="dialog" aria-modal="true" aria-labelledby="quick-entry-title">
+        <form className="quick-entry-form" onSubmit={createTransaction}>
+          <div className="quick-entry-top"><button type="button" className="close-entry" aria-label="关闭" onClick={()=>setEntryOpen(false)}>×</button><div className="entry-switch"><button type="button" aria-pressed={entryType==='expense'} className={entryType==='expense'?'expense-selected':''} onClick={()=>setEntryType('expense')}>支出</button><button type="button" aria-pressed={entryType==='income'} className={entryType==='income'?'income-selected':''} onClick={()=>setEntryType('income')}>收入</button></div><span className="quick-plus">＋</span></div>
+          <h2 id="quick-entry-title">选择{entryType==='income'?'收入':'支出'}分类</h2>
+          <div className="category-grid">{categories.filter(item=>item.flow===entryType).map(item=>{const icon=DEFAULT_CATEGORIES[entryType as Category['flow']].find(value=>value.name===item.name)?.icon??'◻️';return <button type="button" key={item.id} className={selectedCategoryId===item.id?'category-tile selected-category':''} onClick={()=>setSelectedCategoryId(item.id)}><span className="category-icon">{icon}</span><span>{item.name}</span></button>})}</div>
+          {selectedCategoryId&&<input type="hidden" name="category" value={selectedCategoryId}/>}
+          <div className="quick-amount-row"><label className="amount-label">金额（CNY）<input name="amount" type="number" min="0.01" step="0.01" required inputMode="decimal" placeholder="0.00" autoFocus/></label><label>账户<select name="account" required disabled={accounts.length===0}>{accounts.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
+          <p className="entry-time">记账时间自动使用北京时间：{formatShanghaiTimestamp(new Date().toISOString())}</p>
+          <label>备注（选填）<input name="note" maxLength={500} placeholder="添加备注"/></label>
+          {active.kind==='business'&&entryType==='income'&&<details className="optional-details"><summary>订单名称和业务类型（选填）</summary><label>订单名称<input name="orderTitle" maxLength={160}/></label><label>业务类型<input name="businessType" maxLength={80}/></label></details>}
+          {active.kind==='business'&&entryType==='expense'&&<label>关联订单（选填）<select name="costOrder"><option value="">不关联订单</option>{orders.map(order=><option key={order.id} value={order.id}>{order.order_date} · {order.title||'未填写订单名称'}</option>)}</select></label>}
+          <details className="optional-details"><summary>更多记账方式（转账 / 退款）</summary><label>类型<select value={entryType} onChange={event=>setEntryType(event.target.value as typeof entryType)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">内部转账</option>{active.kind==='business'&&<option value="refund">业务退款</option>}</select></label>{entryType==='transfer'&&<label>转入账户<select name="transferAccount" required>{accounts.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{entryType==='refund'&&<label>关联原订单<select name="refundOrder" required>{orders.map(order=><option key={order.id} value={order.id}>{order.order_date} · {order.title||'未填写订单名称'}</option>)}</select></label>}</details>
+          {accounts.length===0&&<p className="error">还没有账户，请先在“资产”中添加账户。</p>}
+          {(entryType==='income'||entryType==='expense')&&categories.filter(item=>item.flow===entryType).length===0&&<p className="error">暂无此类分类，请刷新页面后重试。</p>}
+          <button className="save-quick-entry" disabled={busy||accounts.length===0||((entryType==='income'||entryType==='expense')&&(!selectedCategoryId||!categories.some(item=>item.id===selectedCategoryId&&item.flow===entryType)))||(entryType==='refund'&&orders.length===0)}>{busy?'正在保存…':'保存'}</button>
+        </form>
+      </section></div>}
     </>}
     {notice && <p className="notice" role="status">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}
     <div className="sync-footer"><small role="status">{syncState}</small><button className="refresh secondary" disabled={busy || loading} onClick={() => void loadLedgers()}>刷新云端数据</button></div>
