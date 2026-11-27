@@ -222,6 +222,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
     else {
       setNotice('流水已保存到云端。');
+      window.dispatchEvent(new Event('jizhuzhang:transactions-changed'));
       setRequestId(createRequestId());
       setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
       await Promise.all([loadOptions(), loadTransactions(0,'')]);

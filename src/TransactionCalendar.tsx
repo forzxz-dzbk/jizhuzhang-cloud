@@ -25,7 +25,19 @@ export function TransactionCalendar({ ledgerId }: { ledgerId: string }) {
     else setDays((data ?? []) as Day[]);
     setLoading(false);
   }, [ledgerId, month]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const onLocalChange = () => void refresh();
+    window.addEventListener('jizhuzhang:transactions-changed', onLocalChange);
+    const client = supabase;
+    const channel = client?.channel(`calendar-${ledgerId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `ledger_id=eq.${ledgerId}` }, onLocalChange)
+      .subscribe();
+    return () => {
+      window.removeEventListener('jizhuzhang:transactions-changed', onLocalChange);
+      if (client && channel) void client.removeChannel(channel);
+    };
+  }, [ledgerId, refresh]);
   const map = new Map(days.map(day => [day.occurred_on, day]));
   const [year, number] = month.split('-').map(Number);
   const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
