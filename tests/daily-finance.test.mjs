@@ -42,6 +42,8 @@ test('daily summary is rendered per selected ledger and queries only actual tran
   assert.match(component, /timeZone:'Asia\/Shanghai'/);
   assert.match(component, /eq\('ledger_id',ledgerId\)/);
   assert.match(component, /今日财务小结/);
+  assert.match(component, /今日净额（收入 − 支出\/退款）/);
+  assert.match(component, /formatCents\(daily\.surplus\)/);
   assert.match(component, /本月支出 \/ 退款/);
   assert.match(component, /当前所选账本统计/);
   assert.match(component, /transaction_totals/);

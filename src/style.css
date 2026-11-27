@@ -13,3 +13,4 @@
 :root{color-scheme:light}
 .fatal-error{max-width:560px;margin:10vh auto;padding:24px;border-radius:20px;background:#fff;box-shadow:0 20px 60px #183e3518;color:#182729;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6}
 .fatal-error h1{font-size:24px}.fatal-error button{min-height:44px;padding:10px 18px;border:0;border-radius:10px;background:#237c70;color:#fff;font:inherit;font-weight:700}
+.overview-grid article.daily-net{background:#eaf5f2;border-color:#b9d8d0}.overview-grid article.daily-net strong{font-size:26px;color:#176b5e}

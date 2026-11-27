@@ -23,9 +23,9 @@ export function LedgerOverview({ledgerId}:{ledgerId:string}){
   return <div className="overview-stack">
     <section className="overview-grid" aria-label="今日财务小结">
       <h2>今日财务小结 · {today}</h2>
+      <article className="daily-net"><span>今日净额（收入 − 支出/退款）</span><strong>{formatCents(daily.surplus)}</strong></article>
       <article><span>今日实际收入</span><strong>{formatCents(daily.income)}</strong></article>
       <article><span>今日实际支出 / 退款</span><strong>{formatCents(daily.expense)}</strong></article>
-      <article><span>今日结余</span><strong>{formatCents(daily.income-daily.expense)}</strong></article>
       <p>按当前所选账本统计；不含内部转账和待确认固定支出。业务收入按实际记账日展示。</p>
       {loading&&<small role="status">正在读取当前账本实际流水…</small>}{error&&<small className="error" role="alert">{error}</small>}
     </section>
