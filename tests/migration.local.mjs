@@ -31,6 +31,8 @@ try {
   await db.exec(realtimeGoalMigration);
   const transactionManagementMigration = await readFile(new URL('../supabase/migrations/0008_edit_delete_transactions.sql', import.meta.url), 'utf8');
   await db.exec(transactionManagementMigration);
+  const coreRealtimeMigration = await readFile(new URL('../supabase/migrations/0009_enable_core_realtime.sql', import.meta.url), 'utf8');
+  await db.exec(coreRealtimeMigration);
   await db.exec(`insert into auth.users values ('${userA}'),('${userB}');`);
   await db.exec(`select set_config('request.jwt.claim.sub','${userA}',false); set role authenticated;
     insert into public.ledgers(owner_id,kind,name) values (auth.uid(),'personal','生活');`);
@@ -209,5 +211,5 @@ try {
   const restored=(await db.query(`select i.status,t.recurring_instance_id from public.recurring_expense_instances i join public.transactions t on t.id=i.transaction_id where i.id='${recoveryInstance}'`)).rows[0];
   assert.equal(restored.status,'confirmed','restored recurring instance returns to its confirmed state after transaction insertion');
   assert.equal(restored.recurring_instance_id,recoveryInstance,'restored transaction and instance preserve their reciprocal references');
-  console.log('PASS migrations 0001-0008/RLS; split ledgers; owner-isolated goals; optional daily target and Realtime publication; Shanghai occurrence timestamps; transaction edit/delete with refund safeguards, accurate daily totals, and recurring reset; actual-received-date revenue; idempotent business flows; pending bill gates; cycle-safe restore.');
+  console.log('PASS migrations 0001-0009/RLS; split ledgers; owner-isolated goals; optional daily target and core Realtime publication; Shanghai occurrence timestamps; transaction edit/delete with refund safeguards, accurate daily totals, and recurring reset; actual-received-date revenue; idempotent business flows; pending bill gates; cycle-safe restore.');
 } finally { await db.close(); }

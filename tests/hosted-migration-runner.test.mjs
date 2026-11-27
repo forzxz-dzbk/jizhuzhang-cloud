@@ -107,6 +107,9 @@ test('hosted 0008 transaction migration is project-pinned and verifies RLS-bound
   assert.match(packageJson.scripts['db:apply-transaction-management'], /apply-hosted-0008\.ps1/);
   assert.match(transactionRunner, /eexsbypxhkfxqazwqgdq/);
   assert.match(transactionRunner, /0008_edit_delete_transactions\.sql/);
+  assert.match(transactionRunner, /0009_enable_core_realtime\.sql/);
+  assert.match(transactionRunner, /realtime_count/);
+  assert.match(transactionRunner, /business_daily_goal_settings/);
   assert.match(transactionRunner, /update_transaction/);
   assert.match(transactionRunner, /delete_transaction/);
   assert.match(transactionRunner, /transactions_rls/);
