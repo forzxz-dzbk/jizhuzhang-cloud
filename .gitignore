@@ -3,6 +3,7 @@ dist/
 .env.local
 .vercel/
 supabase/.temp/
+supabase/server-ca.crt
 coverage/
 *.tsbuildinfo
 .env.*

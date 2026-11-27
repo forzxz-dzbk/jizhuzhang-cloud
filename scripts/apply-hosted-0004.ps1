@@ -22,9 +22,17 @@ if (-not $connectionString.StartsWith('postgres://') -and -not $connectionString
 $exitCode = 0
 try {
     $env:JZZ_SUPABASE_POOLER_URL = $connectionString
+    $caCertificate = Join-Path $projectRoot 'supabase\server-ca.crt'
+    if (Test-Path -LiteralPath $caCertificate) {
+        $env:JZZ_SUPABASE_CA_CERT_PATH = $caCertificate
+    }
     Push-Location $projectRoot
     try { & $nodePath --use-system-ca $runner; $exitCode = $LASTEXITCODE }
-    finally { Pop-Location; Remove-Item Env:JZZ_SUPABASE_POOLER_URL -ErrorAction SilentlyContinue }
+    finally {
+        Pop-Location
+        Remove-Item Env:JZZ_SUPABASE_POOLER_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH -ErrorAction SilentlyContinue
+    }
 }
 finally { $connectionString = $null }
 exit $exitCode

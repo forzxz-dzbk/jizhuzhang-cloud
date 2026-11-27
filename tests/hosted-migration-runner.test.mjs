@@ -36,6 +36,9 @@ test('hosted 0004 runner is project-pinned, additive, idempotent, and verifies o
   assert.match(savingsRunner, /savings_goals_owner_all/);
   assert.match(savingsRunner, /savings_goals_personal_ledger_guard/);
   assert.match(savingsRunner, /replace\(connectionString, '\[数据库连接已隐藏\]'\)/);
+  assert.match(savingsRunner, /JZZ_SUPABASE_CA_CERT_PATH/);
+  assert.match(savingsRunner, /rejectUnauthorized: true/);
+  assert.match(savingsRunner, /SELF_SIGNED_CERT_IN_CHAIN/);
   assert.doesNotMatch(savingsRunner, /0001_cloud_foundation\.sql|0002_business_order_costs_and_types\.sql|0003_daily_goal_by_received_date\.sql/);
 });
 
@@ -52,4 +55,6 @@ test('hosted 0004 launcher reads only a copied PostgreSQL URI and clears it afte
   assert.doesNotMatch(savingsLauncher, /pnpm/);
   assert.match(savingsLauncher, /JZZ_SUPABASE_POOLER_URL/);
   assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_POOLER_URL/);
+  assert.match(savingsLauncher, /supabase\\server-ca\.crt/);
+  assert.match(savingsLauncher, /Remove-Item Env:JZZ_SUPABASE_CA_CERT_PATH/);
 });
