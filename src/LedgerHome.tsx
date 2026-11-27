@@ -9,6 +9,7 @@ import { escapeLikePattern } from './transaction-search.mjs';
 import { AccountBalances } from './AccountBalances';
 import { BusinessOrderStatistics } from './BusinessOrderStatistics';
 import { SavingsGoals } from './SavingsGoals';
+import { createRequestId } from './uuid.mjs';
 
 type Ledger = { id: string; kind: 'personal' | 'business'; name: string };
 type Transaction = {
@@ -38,7 +39,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
   const [categoryName, setCategoryName] = useState('');
   const [categoryFlow, setCategoryFlow] = useState<Category['flow']>('expense');
   const [entryType, setEntryType] = useState<'income' | 'expense' | 'transfer' | 'refund'>('expense');
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState(() => createRequestId());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -189,7 +190,7 @@ export function LedgerHome({ session, onSignOut }: { session: Session; onSignOut
     if (saveError) setError(`保存失败，流水未确认写入：${saveError.message}`);
     else {
       setNotice('流水已保存到云端。');
-      setRequestId(crypto.randomUUID());
+      setRequestId(createRequestId());
       setTransactionSearch(''); setSearchQuery(''); setTransactionPage(0);
       await Promise.all([loadOptions(), loadTransactions(0,'')]);
       formElement.reset();

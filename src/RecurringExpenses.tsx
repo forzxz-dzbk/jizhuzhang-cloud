@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { createRequestId } from './uuid.mjs';
 
 type Account = { id: string; name: string };
 type Category = { id: string; name: string; flow: 'income'|'expense' };
@@ -44,7 +45,7 @@ export function RecurringExpenses({ ledgerId, accounts, categories, onConfirmed 
     setBusy(false);
   }
   async function confirm(e:FormEvent<HTMLFormElement>,instance:Instance){
-    e.preventDefault();if(!supabase)return;const form=new FormData(e.currentTarget);const id=requestIds[instance.id]??crypto.randomUUID();
+    e.preventDefault();if(!supabase)return;const form=new FormData(e.currentTarget);const id=requestIds[instance.id]??createRequestId();
     if(!requestIds[instance.id])setRequestIds(current=>({...current,[instance.id]:id}));
     setBusyInstance(instance.id);setError('');setNotice('');
     const {error:e1}=await supabase.rpc('confirm_recurring_instance',{

@@ -8,7 +8,7 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: 32/32 unit tests, isolated migrations 0001–0004 and business/RLS/restore flows, and the production build all pass. These checks do not imply that every migration is present in hosted Supabase.
+- Latest local evidence: 32/32 unit tests, isolated migrations 0001–0004 and business/RLS/restore flows, and the production build all pass. On 2026-11-27 the owner ran `0004_savings_goals.sql` in the hosted SQL Editor and reported `Success. No rows returned`; a read-only PostgREST request now recognizes `savings_goals` and returns 401 permission denied to the anonymous publishable role, consistent with the migration's `REVOKE` from `anon`. Authenticated feature acceptance remains pending.
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -62,15 +62,11 @@ The repository is public and GitHub Pages publishes only the frontend bundle; us
 3. Push to `main` or manually run **Deploy GitHub Pages** in Actions. The site URL is `https://forzxz-dzbk.github.io/jizhuzhang-cloud/`.
 4. In Supabase Auth URL Configuration, set that exact URL as the Site URL and add it to Redirect URLs. Email confirmation is enabled, so test confirmation and recovery links after configuration.
 5. Verify sign-in, password recovery, ledger reads/writes, backup download and second-device sync before entering real financial data.
-## Apply the pending savings-goals migration
+## Savings-goals migration status and verification
 
-Only `0004_savings_goals.sql` is pending. Never replay `0001_cloud_foundation.sql` or `0003_daily_goal_by_received_date.sql` on the live project.
+`0004_savings_goals.sql` was run in the hosted SQL Editor on 2026-11-27. Do not replay it unless a metadata check first proves the table or its security objects are incomplete. A read-only anonymous REST request must not be used to grant `anon` access; the expected result is permission denied because the migration grants table access only to `authenticated`. Never replay `0001_cloud_foundation.sql` or `0003_daily_goal_by_received_date.sql` on the live project.
 
-1. In the **记祝账** Supabase project, click **Connect**, select **Session pooler**, and copy the full PostgreSQL URI (port 5432). Keep it on the local clipboard; never paste it into chat or save it in a file.
-2. In **Database → Settings → SSL Configuration**, download the server root certificate and save it as `F:\AI\《记祝账》云端记账项目开发\06-云端候选\supabase\server-ca.crt` or `prod-ca-2021.crt`. Either file is ignored by Git.
-3. In PowerShell, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0004.ps1"`.
-4. The script silently reads the clipboard, checks the project reference, uses the downloaded server certificate with TLS verification enabled, applies only 0004 if absent, and checks the table, RLS, owner policy, and trigger. If TLS still fails, do not disable certificate validation.
-5. Confirm the script reports success, then verify the `savings_goals` REST endpoint is no longer 404 before using the feature.
+Next acceptance must use a signed-in account in the deployed app. Verify that the empty savings-goals state loads, and that owner-only data access remains enforced; do not create test financial records. The hosted runner remains available for future additive migrations, but its URI must never be sent through chat or stored in a file.
 
 ## Supabase migration safety
 
