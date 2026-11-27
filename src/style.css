@@ -20,3 +20,17 @@
 @media(max-width:520px){body{padding:0;display:block}.dashboard.app-shell{padding:12px 16px calc(110px + env(safe-area-inset-bottom));border-radius:0}.ledger-month-heading h1{font-size:28px}.month-hero{padding:16px;border-radius:20px}.month-hero>strong{font-size:34px}.category-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px 0}.category-icon{width:44px;height:44px}.quick-entry-sheet{padding-top:8px}.quick-entry-form h2{margin-bottom:10px}.floating-add{width:62px;height:62px;right:20px}.quick-amount-row{grid-template-columns:1fr}.recent-ledger{padding:14px}.transaction-list li{gap:10px}.transaction-list li>strong{white-space:nowrap}}
 .transaction-copy{flex:1;min-width:120px}.transaction-copy>span,.transaction-copy small{display:block}.transaction-actions{display:flex;gap:6px;flex:0 0 auto}.transaction-actions button{padding:6px 10px;font-size:12px}.transaction-actions .delete-transaction{background:#fff0f0;color:#9f3030}.edit-transaction-sheet{max-height:min(90dvh,100%)}.edit-transaction-sheet .quick-entry-top h2{margin:0;font-size:18px}.edit-transaction-sheet .save-quick-entry{background:#237c70}
 @media(max-width:520px){.transaction-actions{width:100%;justify-content:flex-end}.transaction-actions button{min-height:40px;min-width:64px}}
+/* iPhone narrow-screen layout: keep row content readable and dialogs inside the safe viewport. */
+@media(max-width:520px){
+.transaction-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px 10px;padding:12px 0}
+.transaction-list li>.transaction-copy{grid-column:1;min-width:0;overflow-wrap:anywhere;line-height:1.45}
+.transaction-list li>.transaction-copy>span{overflow-wrap:anywhere}
+.transaction-list li>strong{grid-column:2;grid-row:1;justify-self:end;align-self:start;white-space:nowrap}
+.transaction-list li>.transaction-actions{grid-column:1/-1;width:auto;justify-content:flex-end;flex-wrap:wrap}
+.quick-entry-backdrop{height:100vh;height:100dvh;overflow-y:auto;overscroll-behavior:contain;align-items:flex-end;padding-top:env(safe-area-inset-top)}
+.quick-entry-sheet{width:100%;max-height:calc(100vh - env(safe-area-inset-top));max-height:calc(100dvh - env(safe-area-inset-top));min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-top:max(12px,env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.category-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 4px}
+.category-tile{width:100%;min-width:0;min-height:72px;padding:8px 2px;line-height:1.25;text-align:center;overflow-wrap:anywhere}
+.quick-entry-top{margin-bottom:12px}
+.quick-entry-form{min-width:0}
+}
