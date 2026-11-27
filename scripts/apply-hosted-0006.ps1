@@ -19,25 +19,22 @@ $connectionString = $connectionString.Trim()
 if (-not $connectionString.StartsWith('postgres://') -and -not $connectionString.StartsWith('postgresql://')) {
     throw '剪贴板中未检测到 PostgreSQL 连接串。请复制「记祝账」项目的 Session pooler URI，再重新运行；未连接数据库。'
 }
-$passwordPrompted = $connectionString -match '(?i)(YOUR[-_]?PASSWORD|%3C.*?PASSWORD.*?%3E)'
-if ($passwordPrompted) {
-    $securePassword = Read-Host '请输入「记祝账」项目的 Database Password（输入不显示，不要发到聊天）' -AsSecureString
-    $passwordPointer = [IntPtr]::Zero
+$securePassword = Read-Host '请输入「记祝账」项目当前的 Database Password（输入不显示，不要发到聊天）' -AsSecureString
+$passwordPointer = [IntPtr]::Zero
+$plainPassword = $null
+try {
+    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+    $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+    $parsedUri = [Uri]$connectionString
+    $encodedUsername = $parsedUri.UserInfo.Split(':')[0]
+    $afterAuthority = $connectionString.Substring($connectionString.IndexOf('@') + 1)
+    $encodedPassword = [Uri]::EscapeDataString($plainPassword)
+    $connectionString = '{0}://{1}:{2}@{3}' -f $parsedUri.Scheme, $encodedUsername, $encodedPassword, $afterAuthority
+}
+finally {
+    if ($passwordPointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
     $plainPassword = $null
-    try {
-        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-        $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-        $parsedUri = [Uri]$connectionString
-        $encodedUsername = $parsedUri.UserInfo.Split(':')[0]
-        $afterAuthority = $connectionString.Substring($connectionString.IndexOf('@') + 1)
-        $encodedPassword = [Uri]::EscapeDataString($plainPassword)
-        $connectionString = '{0}://{1}:{2}@{3}' -f $parsedUri.Scheme, $encodedUsername, $encodedPassword, $afterAuthority
-    }
-    finally {
-        if ($passwordPointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
-        $plainPassword = $null
-        $securePassword.Dispose()
-    }
+    $securePassword.Dispose()
 }
 $exitCode = 0
 try {
