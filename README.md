@@ -2,13 +2,13 @@
 
 React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and Realtime. The cloud-first app is published on GitHub Pages and connected to the dedicated Supabase project; real-user acceptance is still pending, so do not treat it as production-ready for financial records yet.
 
-## Current delivery status (2026-11-26)
+## Current delivery status (2026-11-27)
 
 - Supabase project is connected through local `.env.local` using only the browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never add a service-role key to client configuration or source control.
 - The core migration was applied in the Supabase Dashboard. The owner's first re-run failed with `42P07 relation "ledgers" already exists`; do not run `0001_cloud_foundation.sql` again. A read-only audit reported all seven business tables, both views, RLS enabled on all seven tables, seven owner policies, six SECURITY INVOKER functions, three triggers, and `security_invoker=true` on both views.
 - `supabase/operations/enable-realtime.sql` was run in the Dashboard; the owner reported `Success. No rows returned`.
 - No real financial transactions or demo financial data have been inserted.
-- Latest local evidence: 29/29 unit tests, local migrations 0001–0003 and business/RLS/restore flows, and production build all pass; production dependency audit (2026-11-26) reported no known vulnerabilities.
+- Latest local evidence: 32/32 unit tests, isolated migrations 0001–0004 and business/RLS/restore flows, and the production build all pass. These checks do not imply that every migration is present in hosted Supabase.
 - `0002_business_order_costs_and_types.sql` was executed in a fresh query and returned `Success. No rows returned`. A subsequent read-only metadata query confirmed `business_orders.business_type`, `transactions.cost_order_id`, `business_order_totals`, both business RPCs, and RLS enabled on `business_orders`.
 
 ## Implemented
@@ -21,11 +21,11 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Daily financial summary for the selected ledger (Shanghai day) plus cent-accurate monthly actual income, expenses/refunds and surplus.
 - Business-order types, optional order-linked actual expense transactions, refunds, and per-order revenue/cost/operating-surplus statistics are implemented through additive migration `0002_business_order_costs_and_types.sql`.
 - The ¥500 daily goal now assigns business income to the transaction's actual received date (`occurred_on`), never the order creation date; refunds reduce the date they occur. The owner reports `Success. No rows returned` after running migration `0003_daily_goal_by_received_date.sql` in Supabase SQL Editor. A read-only hosted query in the correct Supabase project confirmed revenue_date (no order_date output column) and security_invoker=true. Do not rerun 0003.
-- A Windows-only guarded runner (`pnpm db:apply-goal-migration`) is prepared for 0003: it takes a Session Pooler URI through hidden console input, pins the project ref, inspects existing view state, applies only this migration if needed, and verifies the resulting view without reading ledger data. It has not been run with a real connection URI.
 - Idempotent transaction RPC, business orders/refunds, recurring-expense generation and confirmation, and daily ¥500 revenue calendar.
 - Realtime subscriptions for active ledger data; service worker caches only the same-origin app shell/assets, never auth or database API traffic.
 - Owner-scoped RLS and clear client-side save errors.
-- Authenticated full-cloud JSON backup download and guarded restore, covering all seven data tables; export is paginated, restore is limited to an empty account, checks backup identity/schema, confirms before writing, and attempts to roll back partial writes. Pending expenses retain their status.
+- Authenticated full-cloud JSON backup download and guarded restore, covering the ledger data tables including savings-goal metadata; export is paginated, restore is limited to an empty account, checks backup identity/schema, confirms before writing, and attempts to roll back partial writes. Pending expenses retain their status.
+- Personal savings goals use the live balance of a dedicated same-ledger account; they do not create income/expense rows, and are owner-RLS isolated and personal-ledger-only. Local migration and backup tests cover the new `savings_goals` table.
 
 ## Not yet production-accepted
 
@@ -34,6 +34,8 @@ React + TypeScript + Vite client using Supabase Auth, Postgres, RLS, RPCs, and R
 - Restore has been locally built and tested, including the reciprocal foreign-key flow for confirmed recurring expenses; live authenticated export/restore and the production recovery procedure still need end-to-end verification. Restore only accepts this account's backup and requires all data tables to be empty. Keep downloaded JSON encrypted/private because it contains personal financial data.
 - Hosted 0002 was independently verified after application: the order type and cost-link columns, totals view, business RPCs, and order-table RLS are present. Never rerun the non-idempotent 0001 foundation migration.
 - Hosted schema verification confirms business_daily_revenue.revenue_date and security_invoker=true; the read-only query found no order_date output column and did not read financial rows. Never rerun 0001 or 0003.
+- Savings goals are not yet enabled on hosted Supabase. A read-only request to `public.savings_goals` returned PostgREST `PGRST205` / HTTP 404 on 2026-11-27, so migration `0004_savings_goals.sql` remains unapplied. Do not create savings goals in the live app until the migration is confirmed.
+- The guarded `scripts/apply-hosted-0004.ps1` launcher applies only migration 0004, pins the project reference, verifies RLS/policy/trigger, uses strict TLS and Node's `--use-system-ca`, and reads the copied connection URI from the clipboard without echoing it. The owner attempted earlier launcher revisions, which failed before connecting (paste/control characters, then TLS trust); the latest revision has not yet been successfully run.
 - Sign-up, confirmation resend, and password-reset links return to the GitHub Pages repository base path. Custom QQ SMTP settings are present in Supabase (password hidden); one signup-resend request returned HTTP 200 with an empty JSON body. Actual inbox delivery and account activation remain unverified.
 - The configured Supabase Auth health endpoint returned HTTP 200 on 2026-11-22; this was a health check only, with no financial-table reads or writes.
 - GitHub Pages is configured and the latest deployment is green; `.env.local` is ignored and is not published.
@@ -60,6 +62,15 @@ The repository is public and GitHub Pages publishes only the frontend bundle; us
 3. Push to `main` or manually run **Deploy GitHub Pages** in Actions. The site URL is `https://forzxz-dzbk.github.io/jizhuzhang-cloud/`.
 4. In Supabase Auth URL Configuration, set that exact URL as the Site URL and add it to Redirect URLs. Email confirmation is enabled, so test confirmation and recovery links after configuration.
 5. Verify sign-in, password recovery, ledger reads/writes, backup download and second-device sync before entering real financial data.
+## Apply the pending savings-goals migration
+
+Only `0004_savings_goals.sql` is pending. Never replay `0001_cloud_foundation.sql` or `0003_daily_goal_by_received_date.sql` on the live project.
+
+1. In the **记祝账** Supabase project, click **Connect**, select **Session pooler**, and copy the full PostgreSQL URI (port 5432). Keep it on the local clipboard; never paste it into chat or save it in a file.
+2. In PowerShell, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "F:\AI\《记祝账》云端记账项目开发\06-云端候选\scripts\apply-hosted-0004.ps1"`.
+3. The script silently reads the clipboard, checks the project reference, uses Windows-trusted certificate authorities while retaining TLS verification, applies only 0004 if absent, and checks the table, RLS, owner policy, and trigger. If TLS still fails, do not disable certificate validation; resolve the trusted root CA instead.
+4. Confirm the script reports success, then verify the `savings_goals` REST endpoint is no longer 404 before using the feature.
+
 ## Supabase migration safety
 
 The current live project already contains the core schema. The initial migration is non-idempotent and must not be replayed. Before changing hosted schema, inspect current state and prepare a targeted, additive migration. Realtime setup is separately represented by `supabase/operations/enable-realtime.sql`.
