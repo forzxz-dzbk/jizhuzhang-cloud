@@ -66,9 +66,11 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<sb_publishable_...>
 pnpm test
 pnpm test:db
 pnpm build
+pnpm smoke:prod
 ```
 
 `pnpm test:db` 在隔离的 PGlite 环境运行迁移与业务约束测试；它不连真实用户数据库，也不替代真实设备验收。
+`pnpm smoke:prod` 使用 `.env.local` 的浏览器公开配置，检查正式网页静态资源、iPhone CSS 规则和 Supabase Auth health；不查询任何账目表，也不会输出 URL 密钥。
 
 ## 部署和数据库操作
 
