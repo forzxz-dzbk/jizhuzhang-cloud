@@ -34,3 +34,28 @@
 .quick-entry-top{margin-bottom:12px}
 .quick-entry-form{min-width:0}
 }
+
+/* iOS Safari may use a wide layout viewport in desktop-site mode. Coarse-pointer
+   devices still get the compact phone layout, even when max-width does not match. */
+@media (max-width: 760px), (pointer: coarse) {
+  .dashboard.app-shell{width:100%;min-width:0;max-width:100%;overflow-x:clip}
+  .recent-ledger,.panel{min-width:0}
+  .transaction-list{min-width:0;margin:0;padding:0}
+  .transaction-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px 10px;padding:12px 0}
+  .transaction-list li>.transaction-copy{grid-column:1;min-width:0;width:100%;overflow-wrap:anywhere;word-break:normal;line-height:1.45}
+  .transaction-list li>.transaction-copy>span,.transaction-list li>.transaction-copy small{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+  .transaction-list li>strong{grid-column:2;grid-row:1;justify-self:end;align-self:start;white-space:nowrap;font-size:14px}
+  .transaction-list li>.transaction-actions{grid-column:1/-1;width:auto;justify-content:flex-end;flex-wrap:wrap}
+  .quick-entry-backdrop{height:100vh;height:100dvh;overflow-y:auto;overscroll-behavior:contain;align-items:flex-end;padding-top:env(safe-area-inset-top)}
+  .quick-entry-sheet{width:100%;max-width:720px;max-height:calc(100vh - env(safe-area-inset-top));max-height:calc(100dvh - env(safe-area-inset-top));min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:12px max(16px,env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));border-radius:20px 20px 0 0}
+  .quick-entry-form{min-width:0;width:100%}
+  .quick-entry-top{grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;margin-bottom:12px}
+  .quick-entry-top h2{min-width:0;text-align:center;overflow-wrap:anywhere}
+  .entry-switch{min-width:0}
+  .entry-switch button{min-width:0;padding:10px 14px}
+  .category-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 4px;width:100%;min-width:0}
+  .category-tile{width:100%;min-width:0;min-height:72px;padding:8px 2px;line-height:1.25;text-align:center;overflow-wrap:anywhere}
+  .category-icon{width:44px;height:44px}
+  .quick-amount-row{grid-template-columns:minmax(0,1fr)}
+  .quick-entry-form input,.quick-entry-form select{min-width:0;max-width:100%}
+}
